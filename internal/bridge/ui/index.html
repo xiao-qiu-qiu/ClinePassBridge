@@ -2,6 +2,31 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <script>
+    // Resolve CPA's theme before styles or page content can paint.
+    (() => {
+      function applyTheme(value) {
+        document.documentElement.dataset.theme = value === 'dark' || value === 'white' ? value : 'light';
+      }
+      function syncTheme() {
+        try {
+          if (window.parent !== window) {
+            document.documentElement.classList.add('embedded');
+            applyTheme(window.parent.document.documentElement.getAttribute('data-theme'));
+            return true;
+          }
+        } catch { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
+        try {
+          const saved = JSON.parse(localStorage.getItem('cli-proxy-theme') || '{}').state?.theme;
+          applyTheme(saved === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'white') : saved);
+        } catch { applyTheme(null); }
+        return false;
+      }
+      if (syncTheme()) new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+      window.addEventListener('storage', (event) => { if (event.key === 'cli-proxy-theme') syncTheme(); });
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="cpa-api-base" content="__PASSBRIDGE_API_BASE__">
@@ -9,6 +34,7 @@
   <style>
     :root {
       color-scheme: light;
+      background: var(--bg);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
       font-size: 14px;
       line-height: 1.5;
@@ -352,26 +378,6 @@
     const PAGE_SIZE = 50;
     const $ = (id) => document.getElementById(id);
     const state = { key: '', authType: 'bearer', page: 0, total: 0, logsController: null, providers: new Set(), models: [], editingModelIndex: -1, modelBusy: false, config: null, toastTimer: 0, modelCandidates: [], selectedCandidates: new Set(), candidateBusy: false, candidateSnapshot: [], fetchingModels: false, editingCredentialId: '', credentialBusy: false };
-    function applyTheme(value) {
-      document.documentElement.dataset.theme = value === 'dark' || value === 'white' ? value : 'light';
-    }
-    function syncTheme() {
-      try {
-        if (window.parent !== window) {
-          document.documentElement.classList.add('embedded');
-          applyTheme(window.parent.document.documentElement.getAttribute('data-theme'));
-          return true;
-        }
-      } catch { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
-      try {
-        const saved = JSON.parse(localStorage.getItem('cli-proxy-theme') || '{}').state?.theme;
-        applyTheme(saved === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'white') : saved);
-      } catch { applyTheme(null); }
-      return false;
-    }
-    if (syncTheme()) new MutationObserver(syncTheme).observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
-    window.addEventListener('storage', (event) => { if (event.key === 'cli-proxy-theme') syncTheme(); });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
     const shown = (value, fallback = '未记录') => present(value) ? esc(value) : fallback;
