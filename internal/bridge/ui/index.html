@@ -106,7 +106,34 @@
     .model-row { justify-content: space-between; border-bottom: 1px solid var(--line); padding: 11px 0; min-width: 0; }
     .model-row:last-child { border-bottom: none; }
     #credentialList { display: grid; gap: 10px; }
-    .credential-row { justify-content: space-between; border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-width: 0; background: var(--surface); }
+    .credentials-panel { margin-bottom: 26px; }
+    .credentials-panel .panel-head { flex-wrap: wrap; }
+    .credential-row { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 2fr); gap: 12px 24px; border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px 10px; min-width: 0; background: var(--surface); }
+    .credential-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .credential-title .primary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .credential-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .credential-usage { min-width: 0; }
+    .usage-meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+    .usage-meter { min-width: 0; }
+    .usage-meter-head { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
+    .usage-meter-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+    .usage-track { height: 5px; margin: 7px 0 5px; border-radius: 4px; background: var(--surface-2); overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+    .usage-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+    .usage-meter.warn .usage-fill { background: var(--warn); }
+    .usage-meter.bad .usage-fill { background: var(--danger); }
+    .usage-meter.warn strong { color: var(--warn); }
+    .usage-meter.bad strong { color: var(--danger); }
+    .usage-reset { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+    .usage-status { margin-top: 7px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+    .usage-status.stale { color: var(--warn); }
+    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+    .credential-plan { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .credential-bottom .button { min-height: 28px; font-size: 11px; }
+    .credential-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+    .credential-footer .pagination { margin: 0; }
+    @media (max-width: 860px) { .credential-row { grid-template-columns: 1fr; gap: 12px; } .usage-meters { gap: 12px; } }
+    @media (max-width: 480px) { .credential-bottom { align-items: flex-start; flex-direction: column; gap: 8px; } .credential-plan { font-size: 10px; } .usage-meter-head { font-size: 11px; } }
+
     .model-main, .credential-main { min-width: 0; overflow-wrap: anywhere; }
     .row-actions { display: flex; gap: 5px; flex: none; }
     .tagline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
@@ -232,16 +259,22 @@
 
     <section id="configPanel" role="tabpanel" aria-labelledby="configTab" hidden>
       <div class="section-head"><h2>插件配置</h2></div>
+      <div class="panel credentials-panel">
+        <div class="panel-head"><div><h2>凭据与套餐用量</h2><p class="panel-hint">Cline 账号整体已用比例 · 同一账号的多个 Key 共享套餐</p></div><button class="button compact primary" id="openCredential" type="button">添加凭据</button></div>
+        <div class="toolbar credential-tools">
+          <input class="control search" id="credentialSearch" type="search" placeholder="搜索凭据名称或 ID" aria-label="搜索凭据">
+          <button class="button compact" id="refreshUsage" type="button">刷新本页用量</button>
+          <span class="count" id="credentialCount"></span>
+        </div>
+        <div id="credentialList"><div class="empty">正在读取凭据…</div></div>
+        <div class="credential-footer"><p class="panel-hint">当前页约每分钟更新 · 时间为本地时区</p><div class="pagination" id="credentialPagination" hidden><button class="button compact" id="credentialPrev" type="button">上一页</button><span id="credentialPageInfo"></span><button class="button compact" id="credentialNext" type="button">下一页</button></div></div>
+        <p class="inline-state" id="credentialState" role="status"></p>
+      </div>
       <div class="config-grid">
         <div class="panel">
           <div class="panel-head"><div><h2>模型映射</h2><p class="panel-hint">客户端名称与 Cline Pass 上游模型</p></div><div class="row-actions"><button class="button compact primary" id="openModel" type="button">添加模型</button></div></div>
           <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
           <p class="inline-state" id="modelState"></p>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><div><h2>凭据</h2><p class="panel-hint">仅显示名称和配置状态</p></div><button class="button compact primary" id="openCredential" type="button">添加凭据</button></div>
-          <div id="credentialList" aria-live="polite"><div class="empty">正在读取凭据…</div></div>
-          <p class="inline-state" id="credentialState"></p>
         </div>
         <div class="panel">
           <div class="panel-head"><div><h2>请求与日志设置</h2><p class="panel-hint">仅影响本插件</p></div></div>
@@ -627,10 +660,120 @@
       $('selectCandidates').disabled = state.candidateBusy || !visible.some((m) => !candidateConflict(m));
       $('clearCandidates').disabled = state.candidateBusy || !visible.some((m) => state.selectedCandidates.has(modelKey(m)));
     }
-    function renderCredentials(data) {
-      const items = Array.isArray(data?.items) ? data.items : [];
-      $('credentialList').innerHTML = items.length ? items.map((item) => `<div class="credential-row"><div class="credential-main"><div class="primary-text">${shown(item.label, '未命名')}</div><div class="subtext mono">${shown(item.id, '无 ID')} · ${item.enabled === false ? '已停用' : '已配置'}</div></div><div class="row-actions"><button class="button compact edit-credential" type="button" data-id="${esc(item.id)}" data-label="${esc(item.label)}">编辑</button><button class="button compact danger remove-credential" type="button" data-id="${esc(item.id)}" data-label="${esc(item.label)}">删除</button></div></div>`).join('') : '<div class="empty">尚未导入凭据</div>';
+    const CREDENTIAL_PAGE_SIZE = 12;
+    const credentialView = { items: [], page: 0, visible: [], usage: new Map(), pending: new Map(), queue: new Map(), active: 0 };
+    const usageLabels = { five_hour: '5 小时', weekly: '每周', monthly: '每月' };
+    function usageDate(value) {
+      const date = new Date(value);
+      return value && Number.isFinite(date.getTime()) ? date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
     }
+    function usageHTML(item) {
+      const usage = credentialView.usage.get(item.id);
+      const loading = credentialView.pending.has(item.id) || credentialView.queue.has(item.id);
+      const stale = !!usage?.updated_at && (usage.status !== 'ok' || Date.now() - Date.parse(usage.updated_at) > 90000);
+      const limits = Array.isArray(usage?.limits) ? usage.limits : [];
+      const kinds = [...Object.keys(usageLabels), ...new Set(limits.map((limit) => limit.type).filter((type) => !Object.hasOwn(usageLabels, type)))];
+      const meters = kinds.map((type) => {
+        const limit = limits.find((limit) => limit.type === type);
+        const value = typeof limit?.percent_used === 'number' && Number.isFinite(limit.percent_used) && limit.percent_used >= 0 ? limit.percent_used : null;
+        const reset = usageDate(limit?.resets_at);
+        const resetPassed = reset && Date.parse(limit.resets_at) <= Date.now();
+        const label = Object.hasOwn(usageLabels, type) ? usageLabels[type] : type;
+        const text = value === null ? '—' : `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%`;
+        return `<div class="usage-meter ${value >= 100 ? 'bad' : value >= 80 ? 'warn' : ''}"><div class="usage-meter-head"><span>${esc(label)}</span><strong title="已使用${esc(text)}">${text}</strong></div><div class="usage-track" ${value === null ? 'aria-hidden="true"' : `role="progressbar" aria-label="${esc(label)}已用${esc(text)}${stale ? '，上次数据' : ''}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"`}><span class="usage-fill" style="width:${value === null ? 0 : Math.min(100, value)}%"></span></div><div class="usage-reset">${reset ? `${esc(reset)} 重置${resetPassed ? ' · 待更新' : ''}` : '重置时间 —'}</div></div>`;
+      }).join('');
+      let status = loading ? '正在更新…' : usage?.error || (usage?.updated_at ? `更新于 ${usageDate(usage.updated_at)}` : item.enabled === false ? '已停用，暂停查询' : '等待查询');
+      if (stale) status = `上次数据 · ${usageDate(usage.updated_at)} · ${loading ? '正在更新…' : usage.error || '数据已过期，等待刷新'}`;
+      if (!loading && usage?.status === 'ok' && !limits.length) status = 'Cline 未返回用量窗口';
+      return `<div class="usage-meters">${meters}</div><div class="usage-status ${stale || usage?.error ? 'stale' : ''}" role="status">${esc(status)}</div>`;
+    }
+    function usagePlanHTML(id) {
+      const usage = credentialView.usage.get(id);
+      if (!usage) return '套餐信息待查询';
+      const name = usage.plan?.name || (usage.plan_updated_at && !usage.plan_error ? '暂无有效套餐' : '套餐信息暂不可用');
+      const end = usageDate(usage.plan?.current_period_end);
+      const outdated = usage.plan_error || (usage.plan_updated_at && Date.now() - Date.parse(usage.plan_updated_at) > 360000);
+      return `${esc(name)}${end ? ` · 本期至 ${esc(end)}` : ''}${outdated ? ' · 套餐信息待更新' : ''}`;
+    }
+    function updateUsageRow(id) {
+      const item = credentialView.items.find((entry) => entry.id === id);
+      const row = [...$('credentialList').children].find((node) => node.dataset.id === id);
+      if (!item || !row) return;
+      row.querySelector('.credential-usage').innerHTML = usageHTML(item);
+      row.querySelector('.credential-plan').innerHTML = usagePlanHTML(id);
+      const button = row.querySelector('.refresh-usage');
+      button.disabled = item.enabled === false || credentialView.pending.has(id) || credentialView.queue.has(id);
+      button.textContent = credentialView.pending.has(id) || credentialView.queue.has(id) ? '更新中…' : '刷新';
+    }
+    function renderCredentials(data, focusID = '') {
+      if (data) {
+        credentialView.items = (Array.isArray(data.items) ? data.items : []).slice().sort((a, b) => String(a.label).localeCompare(String(b.label), 'zh-CN') || String(a.id).localeCompare(String(b.id)));
+        const ids = new Set(credentialView.items.map((item) => item.id));
+        for (const id of credentialView.usage.keys()) if (!ids.has(id)) credentialView.usage.delete(id);
+        for (const id of credentialView.pending.keys()) if (!ids.has(id)) credentialView.pending.delete(id);
+      }
+      if (focusID) {
+        $('credentialSearch').value = '';
+        credentialView.page = Math.floor(Math.max(0, credentialView.items.findIndex((item) => item.id === focusID)) / CREDENTIAL_PAGE_SIZE);
+      }
+      const query = $('credentialSearch').value.trim().toLocaleLowerCase();
+      const filtered = credentialView.items.filter((item) => `${item.label} ${item.id}`.toLocaleLowerCase().includes(query));
+      const pages = Math.max(1, Math.ceil(filtered.length / CREDENTIAL_PAGE_SIZE));
+      credentialView.page = Math.min(credentialView.page, pages - 1);
+      credentialView.visible = filtered.slice(credentialView.page * CREDENTIAL_PAGE_SIZE, (credentialView.page + 1) * CREDENTIAL_PAGE_SIZE);
+      const visibleIDs = new Set(credentialView.visible.map((item) => item.id));
+      for (const id of credentialView.queue.keys()) if (!visibleIDs.has(id)) credentialView.queue.delete(id);
+      $('credentialList').innerHTML = credentialView.visible.length ? credentialView.visible.map((item) => `<div class="credential-row" data-id="${esc(item.id)}"><div class="credential-main"><div class="credential-title"><span class="primary-text" title="${esc(item.label)}">${shown(item.label, '未命名')}</span>${item.enabled === false ? '<span class="badge">已停用</span>' : ''}</div><div class="subtext mono credential-id" title="${esc(item.id)}">${esc(item.id)}</div></div><div class="credential-usage">${usageHTML(item)}</div><div class="credential-bottom"><div class="credential-plan">${usagePlanHTML(item.id)}</div><div class="row-actions"><button class="button compact refresh-usage" type="button" data-id="${esc(item.id)}" ${item.enabled === false || credentialView.pending.has(item.id) ? 'disabled' : ''}>刷新</button><button class="button compact edit-credential" type="button" data-id="${esc(item.id)}" data-label="${esc(item.label)}">编辑</button><button class="button compact danger remove-credential" type="button" data-id="${esc(item.id)}" data-label="${esc(item.label)}">删除</button></div></div></div>`).join('') : `<div class="empty">${query ? '没有匹配的凭据' : '尚未添加凭据'}</div>`;
+      $('credentialCount').textContent = query ? `${filtered.length} / ${credentialView.items.length} 个凭据` : `${filtered.length} 个凭据`;
+      $('credentialPagination').hidden = pages <= 1;
+      $('credentialPageInfo').textContent = `${credentialView.page + 1} / ${pages} 页`;
+      $('credentialPrev').disabled = credentialView.page === 0;
+      $('credentialNext').disabled = credentialView.page + 1 >= pages;
+      $('refreshUsage').disabled = !credentialView.visible.some((item) => item.enabled !== false);
+      refreshVisibleUsage();
+    }
+    function usageViewVisible() { return !document.hidden && !$('configPanel').hidden; }
+    function queueUsage(id, force = false) {
+      const item = credentialView.items.find((entry) => entry.id === id);
+      if (!item || item.enabled === false || credentialView.pending.has(id)) return;
+      const value = credentialView.usage.get(id);
+      if (!force && value?.checked_at && Date.now() - Date.parse(value.checked_at) < 60000) { updateUsageRow(id); return; }
+      credentialView.queue.set(id, force || credentialView.queue.get(id) || false);
+      updateUsageRow(id);
+    }
+    function refreshVisibleUsage(force = false) {
+      if (!usageViewVisible()) return;
+      for (const item of credentialView.visible) queueUsage(item.id, force);
+      pumpUsage();
+    }
+    function pumpUsage() {
+      if (!usageViewVisible()) { credentialView.queue.clear(); return; }
+      while (credentialView.active < 3 && credentialView.queue.size) {
+        const [id, force] = credentialView.queue.entries().next().value;
+        credentialView.queue.delete(id);
+        if (credentialView.pending.has(id)) continue;
+        const token = Symbol(id);
+        credentialView.pending.set(id, token);
+        credentialView.active++;
+        updateUsageRow(id);
+        api('/credentials/usage', { query: { id, refresh: force ? '1' : undefined } }).then((value) => {
+          if (credentialView.pending.get(id) === token && credentialView.items.some((item) => item.id === id)) credentialView.usage.set(id, value);
+        }).catch((error) => {
+          if (credentialView.pending.get(id) === token) credentialView.usage.set(id, { ...credentialView.usage.get(id), id, status: 'unavailable', error: `查询失败：${error.message}`, checked_at: new Date().toISOString() });
+        }).finally(() => {
+          if (credentialView.pending.get(id) === token) credentialView.pending.delete(id);
+          credentialView.active--;
+          updateUsageRow(id);
+          pumpUsage();
+        });
+      }
+    }
+    $('credentialSearch').addEventListener('input', () => { credentialView.page = 0; renderCredentials(); });
+    $('credentialPrev').addEventListener('click', () => { credentialView.page = Math.max(0, credentialView.page - 1); renderCredentials(); });
+    $('credentialNext').addEventListener('click', () => { credentialView.page++; renderCredentials(); });
+    $('refreshUsage').addEventListener('click', () => refreshVisibleUsage(true));
+    document.addEventListener('visibilitychange', () => { if (usageViewVisible()) refreshVisibleUsage(); else credentialView.queue.clear(); });
+    setInterval(() => { if (usageViewVisible()) refreshVisibleUsage(); }, 15000);
     async function loadConfig() {
       try {
         const [config, models, credentials] = await Promise.all([api('/config'), api('/models'), api('/credentials')]);
@@ -655,6 +798,7 @@
       $('logsPanel').hidden = !logs;
       $('configPanel').hidden = logs;
       if (!logs) loadConfig();
+      else credentialView.queue.clear();
     }
     $('logsTab').addEventListener('click', () => setTab('logs'));
     $('configTab').addEventListener('click', () => setTab('config'));
@@ -871,10 +1015,11 @@
       try {
         const body = { label };
         if (apiKey) body.api_key = apiKey;
-        await api('/credentials', { method: id ? 'PUT' : 'POST', query: id ? { id } : undefined, body });
+        const saved = await api('/credentials', { method: id ? 'PUT' : 'POST', query: id ? { id } : undefined, body });
+        if (id && apiKey) { credentialView.usage.delete(id); credentialView.pending.delete(id); credentialView.queue.delete(id); }
         $('credentialDialog').close();
         $('credentialState').textContent = id ? '凭据已更新' : '凭据已添加';
-        renderCredentials(await api('/credentials'));
+        renderCredentials(await api('/credentials'), id ? '' : saved.id);
         await loadStatus();
       } catch (error) {
         const message = `保存失败：${error.message}`;
@@ -883,6 +1028,8 @@
       } finally { state.credentialBusy = false; $('saveCredential').disabled = false; $('cancelCredential').disabled = false; }
     });
     $('credentialList').addEventListener('click', async (event) => {
+      const refresh = event.target.closest('.refresh-usage');
+      if (refresh) { queueUsage(refresh.dataset.id, true); pumpUsage(); return; }
       const edit = event.target.closest('.edit-credential');
       if (edit) { openCredentialDialog(edit.dataset.id, edit.dataset.label); return; }
       const button = event.target.closest('.remove-credential');

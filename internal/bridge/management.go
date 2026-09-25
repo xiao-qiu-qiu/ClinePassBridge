@@ -18,7 +18,7 @@ const apiBase = "/v0/management/clinepassbridge"
 
 func (s *Service) registerManagement(raw json.RawMessage) (any, error) {
 	routes := []map[string]string{}
-	for _, p := range []string{"status", "logs", "models", "config", "credentials"} {
+	for _, p := range []string{"status", "logs", "models", "config", "credentials", "credentials/usage"} {
 		routes = append(routes, map[string]string{"Method": "GET", "Path": apiBase + "/" + p})
 	}
 	for _, p := range []string{"models/refresh", "credentials"} {
@@ -104,6 +104,12 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(200, map[string]any{"models": models})
 	case "GET /credentials":
 		return managementJSON(200, map[string]any{"items": s.credentials()})
+	case "GET /credentials/usage":
+		usage, err := s.credentialUsage(r)
+		if err != nil {
+			return managementJSON(statusOf(err), map[string]any{"error": safeError(err)})
+		}
+		return managementJSON(200, usage)
 	case "POST /credentials":
 		return s.importCredential(r)
 	case "PUT /credentials":
@@ -300,6 +306,7 @@ func (s *Service) deleteCredential(credentialID string) (any, error) {
 		return managementJSON(500, map[string]any{"error": "credential removal failed"})
 	}
 	delete(s.creds, credentialID)
+	delete(s.usageCache, credentialID)
 	delete(s.authFiles, credentialID)
 	s.revoked[credentialID] = true
 	return managementJSON(200, map[string]any{"deleted": true})

@@ -34,10 +34,12 @@ type Service struct {
 	revoked       map[string]bool
 	stopCh        chan struct{}
 	logWriteError string
+	usageCache    map[string]*usageCacheEntry
+	usageSlots    chan struct{}
 }
 
 func NewService() *Service {
-	return &Service{cfg: defaultConfig(), creds: map[string]Credential{}, authFiles: map[string]string{}, streams: map[string]struct{}{}, revoked: map[string]bool{}, stopCh: make(chan struct{})}
+	return &Service{cfg: defaultConfig(), creds: map[string]Credential{}, authFiles: map[string]string{}, streams: map[string]struct{}{}, revoked: map[string]bool{}, stopCh: make(chan struct{}), usageCache: map[string]*usageCacheEntry{}, usageSlots: make(chan struct{}, 3)}
 }
 func (s *Service) SetHost(h func(string, any, any) error) { s.mu.Lock(); s.host = h; s.mu.Unlock() }
 func (s *Service) call(method string, in, out any) error {
