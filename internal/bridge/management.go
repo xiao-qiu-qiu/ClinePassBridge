@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -44,6 +45,11 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 			return nil, e
 		}
 		b = []byte(strings.ReplaceAll(string(b), "__PASSBRIDGE_API_BASE__", apiBase))
+		logo, err := ui.ReadFile("ui/cline-logo.png")
+		if err != nil {
+			return nil, err
+		}
+		b = []byte(strings.ReplaceAll(string(b), "__CLINE_LOGO_DATA__", "data:image/png;base64,"+base64.StdEncoding.EncodeToString(logo)))
 		authJS, err := ui.ReadFile("ui/cpa-auth.js")
 		if err != nil {
 			return nil, err

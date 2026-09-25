@@ -17,7 +17,7 @@
       --success: #087c54; --warn: #985d0a; --danger: #b8493a; --focus: #726d67;
       --code-bg: #f0eee8; --shadow: 0 1px 2px rgba(0, 0, 0, .08);
     }
-    :root[data-theme="white"] { --bg: #fff; --surface: #fff; --surface-2: #f6f6f6; --line: #d9d9d9; --code-bg: #f6f6f6; }
+    :root[data-theme="white"] { --bg: #f5f5f4; --surface: #fff; --surface-2: #f6f6f6; --line: #d9d9d9; --code-bg: #f6f6f6; }
     :root[data-theme="dark"] { color-scheme: dark; --bg: #151412; --surface: #1d1b18; --surface-2: #262320; --ink: #f6f4f1; --muted: #c9c3bb; --line: #4a453f; --accent: #8b8680; --accent-hover: #9a948e; --accent-ink: #fff; --success: #6ee7b7; --warn: #f2c77c; --danger: #f1a399; --focus: #a6a099; --code-bg: #262320; --shadow: 0 1px 3px rgba(0, 0, 0, .3); }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--ink); }
@@ -27,9 +27,9 @@
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     .shell { max-width: 1360px; margin: 0 auto; padding: 16px clamp(16px, 3vw, 40px) 56px; }
     .topbar, .heading, .section-head, .toolbar, .pagination, .row-main, .detail-head, .field-line, .credential-row, .model-row { display: flex; align-items: center; gap: 12px; }
-    .topbar { min-height: 32px; }
+    .topbar { min-height: 40px; }
     .brand { display: flex; align-items: center; gap: 11px; min-width: 0; font-weight: 700; font-size: 15px; }
-    .brandmark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 800; flex: none; }
+    .brandmark { width: 32px; height: 32px; display: block; object-fit: contain; border-radius: 8px; flex: none; }
     .brand span:last-child { overflow-wrap: anywhere; }
     .version { color: var(--muted); font-size: 12px; white-space: nowrap; }
     h1 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: 0; }
@@ -50,19 +50,21 @@
     .badge.warn { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
     .badge.bad { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
     .summary-scope { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
-    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
-    .summary-item { padding: 12px 16px; min-width: 0; }
-    .summary-item + .summary-item { border-left: 1px solid var(--line); }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .summary-item { padding: 14px 16px; min-width: 0; background: var(--surface-2); border-radius: 8px; }
     .summary-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
     .summary-value { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     .summary-note { color: var(--muted); font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
-    .summary + .log-head { margin-top: 18px; }
+    .log-controls { margin-bottom: 24px; }
+    .log-controls .toolbar { margin-bottom: 18px; }
     .notice { margin: 14px 0 0; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); border-left: 3px solid var(--warn); border-radius: 4px; color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
     .notice.error { border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
     .notice[hidden], [hidden] { display: none !important; }
-    .tabs { display: flex; gap: 24px; margin-top: 10px; border-bottom: 1px solid var(--line); }
-    .tab { border: 0; background: none; color: var(--muted); padding: 0 2px 11px; border-bottom: 2px solid transparent; font-weight: 600; }
-    .tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+    .tabs { display: inline-flex; gap: 4px; margin: 18px 0 24px; padding: 4px; border-radius: 10px; background: var(--surface-2); }
+    .tab { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); padding: 8px 16px; font-weight: 600; transition: background .16s, color .16s; }
+    .tab svg { width: 16px; height: 16px; flex: none; }
+    .tab:hover { color: var(--ink); }
+    .tab[aria-selected="true"] { color: var(--ink); background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
     .section-head { justify-content: space-between; margin: 20px 0 14px; }
     .toolbar { flex-wrap: wrap; margin-bottom: 14px; }
     .control { height: 38px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 7px 10px; min-width: 0; }
@@ -99,16 +101,18 @@
     .pagination { justify-content: flex-end; margin-top: 14px; color: var(--muted); font-size: 12px; }
     .empty { padding: 48px 20px; text-align: center; color: var(--muted); }
     .empty strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
-    .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
-    .panel { min-width: 0; border-top: 1px solid var(--line); padding-top: 15px; }
-    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .panel { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+    .auth-panel { grid-column: 1 / -1; }
+    .auth-panel .panel-hint { max-width: 880px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
     .panel-hint { color: var(--muted); font-size: 12px; margin-top: 3px; }
-    .model-row { justify-content: space-between; border-bottom: 1px solid var(--line); padding: 11px 0; min-width: 0; }
-    .model-row:last-child { border-bottom: none; }
-    #credentialList { display: grid; gap: 10px; }
-    .credentials-panel { margin-bottom: 26px; }
+    .model-row { justify-content: space-between; border-radius: 8px; background: var(--surface-2); padding: 14px; min-width: 0; }
+    #modelList { display: grid; gap: 10px; }
+    #credentialList { display: grid; gap: 14px; }
+    .credentials-panel { margin-bottom: 24px; }
     .credentials-panel .panel-head { flex-wrap: wrap; }
-    .credential-row { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 2fr); gap: 12px 24px; border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px 10px; min-width: 0; background: var(--surface); }
+    .credential-row { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 2fr); gap: 14px 24px; border-radius: 9px; padding: 18px; min-width: 0; background: var(--surface-2); }
     .credential-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .credential-title .primary-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .credential-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
@@ -117,8 +121,9 @@
     .usage-meter { min-width: 0; }
     .usage-meter-head { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
     .usage-meter-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-    .usage-track { height: 5px; margin: 7px 0 5px; border-radius: 4px; background: var(--surface-2); overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
-    .usage-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+    .usage-track { height: 6px; margin: 8px 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--line) 65%, var(--surface)); overflow: hidden; }
+    .usage-fill { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+    .usage-meter.good strong { color: var(--success); }
     .usage-meter.warn .usage-fill { background: var(--warn); }
     .usage-meter.bad .usage-fill { background: var(--danger); }
     .usage-meter.warn strong { color: var(--warn); }
@@ -126,7 +131,7 @@
     .usage-reset { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
     .usage-status { margin-top: 7px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
     .usage-status.stale { color: var(--warn); }
-    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 2px; }
     .credential-plan { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .credential-bottom .button { min-height: 28px; font-size: 11px; }
     .credential-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
@@ -193,14 +198,16 @@
       .shell { padding-top: 16px; }
       .config-grid { grid-template-columns: 1fr; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .summary-item:nth-child(3) { border-left: 0; }
-      .summary-item:nth-child(n+3) { border-top: 1px solid var(--line); }
       .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .attempt { grid-template-columns: 24px minmax(80px, 1fr) minmax(80px, 1fr); }
       .attempt > :nth-child(4), .attempt > :nth-child(5) { grid-column: 2 / -1; }
     }
     @media (max-width: 480px) {
       .summary-item { padding: 11px; }
+      .summary { gap: 8px; }
+      .panel { padding: 16px; }
+      .credential-row { padding: 14px; }
+      .tab { padding: 8px 12px; }
       .toolbar { gap: 8px; }
       .toolbar .dropdown { flex: 1 1 calc(50% - 4px); }
       .toolbar .button { flex: 1 1 100%; }
@@ -227,22 +234,23 @@
 <body>
   <main class="shell">
     <div class="topbar">
-      <div class="brand"><span class="brandmark" aria-hidden="true">P</span><span>ClinePassBridge</span></div>
+      <div class="brand"><img class="brandmark" src="__CLINE_LOGO_DATA__" width="32" height="32" alt="Cline"><span>ClinePassBridge</span></div>
     </div>
     <div class="notice error" id="logPersistenceError" role="alert" hidden></div>
     <div class="notice error" id="globalError" role="alert" hidden></div>
 
     <div class="tabs" role="tablist" aria-label="管理视图">
-      <button class="tab" id="logsTab" role="tab" aria-selected="true" aria-controls="logsPanel" type="button">请求日志</button>
-      <button class="tab" id="configTab" role="tab" aria-selected="false" aria-controls="configPanel" type="button">配置概览</button>
+      <button class="tab" id="logsTab" role="tab" aria-selected="true" aria-controls="logsPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3Z"/><path d="M15 3v5h5M8 12h8M8 16h5"/></svg><span>请求日志</span></button>
+      <button class="tab" id="configTab" role="tab" aria-selected="false" aria-controls="configPanel" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h7m4 0h5M4 17h3m4 0h9"/><circle cx="13" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>配置概览</span></button>
     </div>
 
     <section id="logsPanel" role="tabpanel" aria-labelledby="logsTab">
-      <div class="section-head"><h2>最近请求</h2><button class="button compact" id="refreshLogs" type="button">刷新日志</button></div>
+      <div class="panel log-controls">
       <div class="toolbar">
         <input class="control search" id="search" type="search" placeholder="搜索模型、渠道或错误" aria-label="搜索请求日志">
         <select class="control" id="statusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="success">成功</option><option value="error">失败</option></select>
         <input class="control provider-filter" id="providerFilter" placeholder="实际渠道" aria-label="按实际渠道筛选" autocomplete="off">
+        <button class="button compact" id="refreshLogs" type="button">刷新日志</button>
         <span class="count" id="logCount">-- 条</span>
       </div>
       <p class="summary-scope">当前筛选 · 全部保留日志，不限当前页</p>
@@ -252,13 +260,13 @@
         <div class="summary-item"><div class="summary-label">输出 tokens</div><div class="summary-value" id="statCompletionTokens">--</div><div class="summary-note">全部保留请求</div></div>
         <div class="summary-item"><div class="summary-label">输入缓存率</div><div class="summary-value" id="statCacheRate">--</div><div class="summary-note" id="statCachedTokens">缓存 tokens --</div></div>
       </div>
+      </div>
       <div class="log-head" aria-hidden="true"><span>时间 / 请求</span><span>客户端模型 / 上游</span><span>结果</span><span>实际上游</span><span>延时</span><span>用量</span><span></span></div>
       <div class="log-list" id="logList" aria-live="polite"><div class="empty">正在读取日志…</div></div>
       <div class="pagination"><button class="button compact" id="prevPage" type="button">上一页</button><span id="pageInfo">第 1 页</span><button class="button compact" id="nextPage" type="button">下一页</button></div>
     </section>
 
     <section id="configPanel" role="tabpanel" aria-labelledby="configTab" hidden>
-      <div class="section-head"><h2>插件配置</h2></div>
       <div class="panel credentials-panel">
         <div class="panel-head"><div><h2>凭据与套餐用量</h2><p class="panel-hint">Cline 账号整体已用比例 · 同一账号的多个 Key 共享套餐</p></div><button class="button compact primary" id="openCredential" type="button">添加凭据</button></div>
         <div class="toolbar credential-tools">
@@ -286,7 +294,7 @@
           </form>
           <p class="inline-state" id="settingsState"></p>
         </div>
-        <div class="panel">
+        <div class="panel auth-panel">
           <div class="panel-head"><div><h2>CPA 管理鉴权（兜底）</h2><p class="panel-hint">用于读取日志和修改插件配置。正常会复用 CPA 登录，无需操作；仅在登录未被识别或鉴权失败时手动输入 CPA 管理密钥。</p></div></div>
           <div class="field-line"><span class="version" id="version">版本 --</span><button class="button compact" id="authButton" type="button">管理密钥</button></div>
         </div>
@@ -680,7 +688,7 @@
         const resetPassed = reset && Date.parse(limit.resets_at) <= Date.now();
         const label = Object.hasOwn(usageLabels, type) ? usageLabels[type] : type;
         const text = value === null ? '—' : `${value.toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%`;
-        return `<div class="usage-meter ${value >= 100 ? 'bad' : value >= 80 ? 'warn' : ''}"><div class="usage-meter-head"><span>${esc(label)}</span><strong title="已使用${esc(text)}">${text}</strong></div><div class="usage-track" ${value === null ? 'aria-hidden="true"' : `role="progressbar" aria-label="${esc(label)}已用${esc(text)}${stale ? '，上次数据' : ''}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"`}><span class="usage-fill" style="width:${value === null ? 0 : Math.min(100, value)}%"></span></div><div class="usage-reset">${reset ? `${esc(reset)} 重置${resetPassed ? ' · 待更新' : ''}` : '重置时间 —'}</div></div>`;
+        return `<div class="usage-meter ${value === null ? '' : value >= 90 ? 'bad' : value >= 70 ? 'warn' : 'good'}"><div class="usage-meter-head"><span>${esc(label)}</span><strong title="已使用${esc(text)}">${text}</strong></div><div class="usage-track" ${value === null ? 'aria-hidden="true"' : `role="progressbar" aria-label="${esc(label)}已用${esc(text)}${stale ? '，上次数据' : ''}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, value)}"`}><span class="usage-fill" style="width:${value === null ? 0 : Math.min(100, value)}%"></span></div><div class="usage-reset">${reset ? `${esc(reset)} 重置${resetPassed ? ' · 待更新' : ''}` : '重置时间 —'}</div></div>`;
       }).join('');
       let status = loading ? '正在更新…' : usage?.error || (usage?.updated_at ? `更新于 ${usageDate(usage.updated_at)}` : item.enabled === false ? '已停用，暂停查询' : '等待查询');
       if (stale) status = `上次数据 · ${usageDate(usage.updated_at)} · ${loading ? '正在更新…' : usage.error || '数据已过期，等待刷新'}`;
