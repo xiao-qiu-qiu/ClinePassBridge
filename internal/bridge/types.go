@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const Version = "0.1.5"
+const Version = "0.1.6"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
@@ -90,7 +90,7 @@ type Config struct {
 }
 
 func defaultConfig() Config {
-	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{{ID: "deepseek-v4.1-flash", UpstreamID: "cline-pass/deepseek-v4.1-flash"}, {ID: "deepseek-flash", UpstreamID: "cline-pass/deepseek-v4.1-flash"}, {ID: "cline-pass/deepseek-v4.1-flash", UpstreamID: "cline-pass/deepseek-v4.1-flash"}}, NonstreamMode: "stream-aggregate", TimeoutSeconds: 180, LogRetention: 1000, MaxResponseBytes: 16 << 20}
+	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{}, NonstreamMode: "stream-aggregate", TimeoutSeconds: 180, LogRetention: 1000, MaxResponseBytes: 16 << 20}
 }
 func (c *Config) validate() error {
 	u, e := url.Parse(c.BaseURL)

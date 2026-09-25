@@ -10,10 +10,11 @@ import (
 )
 
 type upstreamStream struct {
-	deadline   time.Time
-	StatusCode int         `json:"status_code"`
-	Headers    http.Header `json:"headers"`
-	StreamID   string      `json:"stream_id"`
+	deadline    time.Time
+	diagnostics *modelTestDiagnostics
+	StatusCode  int         `json:"status_code"`
+	Headers     http.Header `json:"headers"`
+	StreamID    string      `json:"stream_id"`
 }
 type readChunk struct {
 	Payload []byte `json:"payload"`
@@ -50,7 +51,7 @@ func (s *Service) prepare(r ExecutorRequest) (map[string]any, Credential, string
 func headers(c Credential) http.Header {
 	return http.Header{"Authorization": []string{"Bearer " + c.APIKey}, "Content-Type": []string{"application/json"}, "User-Agent": []string{"ClinePassBridge/" + Version}}
 }
-func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool) (upstreamStream, error) {
+func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
 	j["stream"] = stream
 	if stream {
 		opts := object(j["stream_options"])
@@ -62,10 +63,10 @@ func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, str
 	} else {
 		delete(j, "stream_options")
 	}
-	return s.openUpstream(map[string]any{"host_callback_id": r.HostCallbackID, "method": "POST", "url": s.config().BaseURL + "/chat/completions", "headers": headers(c), "body": jsonBytes(j)}, r.deadline)
+	return s.openUpstream(map[string]any{"host_callback_id": r.HostCallbackID, "method": "POST", "url": s.config().BaseURL + "/chat/completions", "headers": headers(c), "body": jsonBytes(j)}, r.deadline, diagnostics...)
 }
 
-func (s *Service) openUpstream(payload any, deadline time.Time) (upstreamStream, error) {
+func (s *Service) openUpstream(payload any, deadline time.Time, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
 	if deadline.IsZero() {
 		deadline = time.Now().Add(time.Duration(s.config().TimeoutSeconds) * time.Second)
 	}
@@ -95,7 +96,11 @@ func (s *Service) openUpstream(payload any, deadline time.Time) (upstreamStream,
 	select {
 	case result := <-results:
 		out = result.up
+		if len(diagnostics) > 0 {
+			out.diagnostics = diagnostics[0]
+		}
 		if result.err != nil {
+			out.diagnostics.transportError(result.err.Error())
 			s.closeUpstream(out.StreamID)
 			return out, fail(502, "upstream transport failed: "+safeError(result.err))
 		}
@@ -155,12 +160,15 @@ func (s *Service) read(up upstreamStream, fn func([]byte) error) error {
 			return fail(504, "Cline upstream request timed out")
 		}
 		if e != nil {
+			up.diagnostics.transportError(e.Error())
 			return fail(502, "upstream read failed: "+safeError(e))
 		}
 		if chunk.Error != "" {
+			up.diagnostics.transportError(chunk.Error)
 			return fail(502, "upstream stream interrupted: "+safeError(errors.New(chunk.Error)))
 		}
 		total += len(chunk.Payload)
+		up.diagnostics.capture(chunk.Payload)
 		if total > cfg.MaxResponseBytes {
 			return fail(502, "upstream response exceeds configured limit")
 		}

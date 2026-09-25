@@ -36,6 +36,7 @@ type Service struct {
 	logWriteError string
 	usageCache    map[string]*usageCacheEntry
 	usageSlots    chan struct{}
+	modelTests    map[string]bool
 }
 
 func NewService() *Service {
@@ -221,7 +222,7 @@ func (s *Service) modelRegistration() any {
 func (s *Service) resolveModel(model string) (string, error) {
 	cfg := s.config()
 	for _, m := range cfg.Models {
-		if model == m.ID || model == m.UpstreamID {
+		if model == m.ID {
 			return m.UpstreamID, nil
 		}
 	}

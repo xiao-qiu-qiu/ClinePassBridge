@@ -1,31 +1,31 @@
 # ClinePassBridge
 
-ClinePassBridge 是 [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 Cline Pass 插件。它把 Cline Pass API key 接入 CPA 的凭据系统，提供模型别名、Chat Completions 协议适配、真实 SSE 流及请求观测。首版面向 CLIProxyAPI v7.3.12，发布 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 五个平台的动态库。
+ClinePassBridge 是 [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 Cline Pass 插件。它把 Cline Pass API key 接入 CPA 的凭据系统，提供模型别名映射、Chat Completions 协议适配、真实 SSE 流及请求观测等功能。
 
 ## 功能
 
 - 在插件管理页导入 Cline Pass API key，凭据交给 CPA 的 `auth-dir` 保存；插件状态目录不保存 key。
-- 将客户端模型名映射为指定上游 ID，用户填写的两个名称均原样保存；默认别名 `deepseek-flash` 指向 `cline-pass/deepseek-v4.1-flash`，可在管理页维护其他映射。
-- 非流式支持 `native`（解包 Cline 原生 `success/data`）、`native-fallback`（原生遇到空内容错误时尝试流式聚合）和 `stream-aggregate`（直接由 SSE 聚合）三种模式。默认 `stream-aggregate`，直接聚合上游 SSE 后返回 JSON，跳过原生非流式尝试。
-- 流式请求转发为真正的 SSE，处理跨网络分块的事件、用量与终止信号；从上游响应元数据记录实际 provider，缺失时显示“未知”，不根据请求参数猜测。
+- 按用户配置的映射列表，将客户端模型名映射为指定上游 ID；初始列表为空。
+- “添加模型”弹窗内可获取上游模型；获取后默认使用不带 `cline-pass/` 的客户端名称，映射到带 `cline-pass/` 前缀的服务端模型。
+- 非流式支持 `native`（解包 Cline 原生 `success/data`）、`native-fallback`（原生遇到空内容错误时尝试流式聚合）和 `stream-aggregate`（直接由 SSE 聚合）三种模式。默认 `stream-aggregate`，直接聚合上游 SSE 后返回 JSON，跳过原生非流式尝试。规避 Cline 原生非流式空响应导致的 500 错误。
+- 流式请求转发为真正的 SSE，处理跨网络分块的事件、用量与终止信号；从上游响应元数据记录实际 provider。
 - 管理页展示凭据、模型映射、请求状态、耗时、用量、实际 provider 和尝试记录。
-- “添加模型”弹窗内可获取上游模型；已有的默认映射自动勾选，取消勾选后应用会删除该映射。仅当客户端名称与上游 ID 均完全匹配候选默认值时参与同步，自定义映射保持不变；同名但不同上游的候选会提示冲突。确认时若其他页面已经修改映射，会提示重新获取，避免覆盖。可取消全部默认映射；候选默认使用不带 `cline-pass/` 的客户端名称和目录中的完整上游 ID。之后编辑的名称原样保存，不自动补全或去重前缀。
-- 模型添加和编辑使用弹窗，模型删除直接执行。界面跟随同源 CPA 主题，日志提供当前筛选结果的 token 和输入缓存率统计。
-- 凭据使用添加与编辑弹窗，支持修改备注和 API key；编辑时留空 key 保持原值，页面不回显旧 key。
+- 每条映射支持“测试模型”，可选择测试凭据，发送简短消息验证是否能完整返回响应。完整响应耗时按绿（小于 3 秒）、黄（3–10 秒）、红（10 秒及以上）显示；失败或超时标红，点击可展开完整错误详情，敏感密钥会被遮蔽。
+
+模型测试固定使用流式聚合，沿用请求超时设置，单次最多输出 64 tokens，不自动重试或切换账号；会消耗所选账号的少量额度，并计入请求日志与用量统计。测试结果仅代表该账号在测试时的可用性。错误详情受配置中的最大响应大小限制，超过上限时明确标记截断。凭据独立代理暂不支持此管理页测试，普通全局代理可用。
+
 
 ## 安装
 
-先在 CPA 配置中启用插件并添加本仓库的市场源。需要 CLIProxyAPI v7.3.12 或兼容的插件 ABI。以下是通用配置片段，按现有配置合并：
+ClinePassBridge 已收录到 CPA 内置官方插件市场，启用插件后直接搜索安装即可，无需添加额外市场源。需要 CLIProxyAPI v7.3.12 或兼容的插件 ABI。以下是通用配置片段，按现有配置合并：
 
 ```yaml
 plugins:
   enabled: true
   dir: plugins
-  store-sources:
-    - https://raw.githubusercontent.com/xiao-qiu-qiu/ClinePassBridge/main/marketplace/registry.json
 ```
 
-CPA 的内置官方市场始终保留；`store-sources` 添加一个额外来源。安装 `v0.1.1` 或更高版本时，在 CPA 的插件市场找到 **ClinePassBridge** 并安装。市场读取 `marketplace/registry.json`，再从本仓库 Release 下载与宿主平台匹配的 ZIP 和 `checksums.txt`，核验 ZIP 的 SHA-256。各 ZIP 根目录分别是 `clinepassbridge.so`（Linux）、`clinepassbridge.dylib`（macOS）或 `clinepassbridge.dll`（Windows）；安装后的文件名带版本，但插件 ID 始终是 `clinepassbridge`。
+在 CPA 的插件市场找到来源为 **CLIProxyAPI源（官方源）** 的 **ClinePassBridge** 并安装。市场从本仓库 Release 下载与宿主平台匹配的 ZIP 和 `checksums.txt`，核验 ZIP 的 SHA-256。各 ZIP 根目录分别是 `clinepassbridge.so`（Linux）、`clinepassbridge.dylib`（macOS）或 `clinepassbridge.dll`（Windows）；安装后的文件名带版本，但插件 ID 始终是 `clinepassbridge`。
 
 市场安装会写入插件配置。插件加载后打开：
 
@@ -39,7 +39,11 @@ CPA 的内置官方市场始终保留；`store-sources` 添加一个额外来源
 
 ## 模型与路由
 
-客户端调用 CPA 的 OpenAI 兼容接口时可使用 `deepseek-flash`、`deepseek-v4.1-flash` 或 `cline-pass/deepseek-v4.1-flash`。首版默认三者都映射到 `cline-pass/deepseek-v4.1-flash`。其他模型需先在管理页添加映射，并确认 Cline Pass 账号有该模型的使用资格；模型目录出现某个 ID 不代表订阅可调用。
+客户端调用 CPA 的 OpenAI 兼容接口时，`model` 必须与管理页映射列表中的“客户端模型名称”完全一致。插件仅注册并接受已配置的名称，不自动添加别名，也不会把“上游模型 ID”隐式当成另一个客户端名称；如需直接使用上游 ID 调用，请单独添加同名映射。
+
+初次安装的映射列表为空。可以手动添加，或点击“添加模型 → 获取上游模型”，勾选后确认添加。还需确认 Cline Pass 账号有对应模型的使用资格，模型目录出现某个 ID 不代表订阅可调用。
+
+例如，先添加客户端名称 `deepseek-flash`、上游 ID `cline-pass/deepseek-v4.1-flash` 的映射，然后才能通过本插件发起以下请求：
 
 ```json
 {
@@ -48,6 +52,8 @@ CPA 的内置官方市场始终保留；`store-sources` 添加一个额外来源
   "stream": true
 }
 ```
+
+升级会保留已保存的映射列表。旧版默认映射若已写入配置，也会作为已有配置保留；不需要的条目可在管理页删除，删除或清空后不会自动补回。
 
 日志中的实际 provider 来自上游响应；未回报时显示“未知”。
 

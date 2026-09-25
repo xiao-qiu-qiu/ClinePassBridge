@@ -139,6 +139,18 @@
     .panel-hint { color: var(--muted); font-size: 12px; margin-top: 3px; }
     .model-row { justify-content: space-between; border-radius: 8px; background: var(--inset-bg); padding: 14px; min-width: 0; }
     #modelList { display: grid; gap: 10px; }
+    .model-test-tools { margin: 0 0 14px; display: grid; gap: 6px; }
+    .model-test-tools label { font-size: 12px; font-weight: 600; color: var(--muted); }
+    .model-test-tools .panel-hint { margin: 0; font-size: 11px; }
+    .model-row { flex-wrap: wrap; }
+    .model-row > .model-main { flex: 1 1 180px; }
+    .model-test-result { flex-basis: 100%; min-width: 0; padding-top: 10px; border-top: 1px solid var(--inset-line); display: grid; gap: 7px; }
+    .model-test-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .model-test-error { min-width: 0; color: var(--danger); font-size: 12px; }
+    .model-test-error summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
+    .model-test-error summary span:first-child { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .model-test-error summary span:last-child { flex-shrink: 0; text-decoration: underline; }
+    .model-test-error pre { margin: 9px 0 0; padding: 12px; border: 1px solid var(--inset-line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
     #credentialList { display: grid; gap: 14px; }
     .credentials-panel { margin-bottom: 24px; }
     .credentials-panel .panel-head { flex-wrap: wrap; }
@@ -311,6 +323,7 @@
       <div class="config-grid">
         <div class="panel">
           <div class="panel-head"><div><h2>模型映射</h2><p class="panel-hint">客户端名称与 Cline Pass 上游模型</p></div><div class="row-actions"><button class="button compact primary" id="openModel" type="button">添加模型</button></div></div>
+          <div class="model-test-tools"><label for="modelTestCredential">测试凭据</label><select class="control" id="modelTestCredential"><option value="">请先添加并启用凭据</option></select><p class="panel-hint">发送一条简短消息 · 结果仅代表所选账号 · 完整响应耗时：&lt;3 秒绿 / 3–10 秒黄 / ≥10 秒红</p></div>
           <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
           <p class="inline-state" id="modelState"></p>
         </div>
@@ -378,6 +391,7 @@
     const PAGE_SIZE = 50;
     const $ = (id) => document.getElementById(id);
     const state = { key: '', authType: 'bearer', page: 0, total: 0, logsController: null, providers: new Set(), models: [], editingModelIndex: -1, modelBusy: false, config: null, toastTimer: 0, modelCandidates: [], selectedCandidates: new Set(), candidateBusy: false, candidateSnapshot: [], fetchingModels: false, editingCredentialId: '', credentialBusy: false };
+    const modelTestResults = new Map();
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
     const shown = (value, fallback = '未记录') => present(value) ? esc(value) : fallback;
@@ -529,8 +543,9 @@
       if (!response.ok) {
         if ((response.status === 401 || response.status === 403) && !$('authDialog').open) $('authDialog').showModal();
         let detail = '';
-        try { const body = await response.json(); detail = body.error || body.message || ''; } catch { /* An HTML error page is possible. */ }
-        throw new Error(`HTTP ${response.status}${detail ? `：${String(detail).slice(0, 240)}` : ''}`);
+        const raw = await response.text();
+        try { const body = JSON.parse(raw); detail = body.error || body.message || raw; } catch { detail = raw; }
+        throw new Error(`HTTP ${response.status}${detail ? `：${options.fullError ? String(detail) : String(detail).slice(0, 240)}` : ''}`);
       }
       if (response.status === 204) return null;
       const text = await response.text();
@@ -636,7 +651,7 @@
       state.models = Array.isArray(data?.models) ? data.models.map((model) => ({ id: model.id, upstream_id: model.upstream_id, providers: Array.isArray(model.providers) ? [...model.providers] : [] })) : [];
       for (const model of state.models) for (const provider of model.providers) if (present(provider)) state.providers.add(String(provider));
       renderProviderOptions();
-      $('modelList').innerHTML = state.models.length ? state.models.map((model, index) => `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><div class="row-actions"><button class="button compact edit-model" type="button" data-index="${index}">编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">删除</button></div></div>`).join('') : '<div class="empty">暂无模型映射</div>';
+      renderModelRows();
       if (state.editingModelIndex >= state.models.length) resetModelForm();
       if ($('modelCandidateDialog').open) renderCandidateList();
     }
@@ -646,6 +661,50 @@
       await loadStatus();
     }
     const modelKey = (model) => JSON.stringify([model.id, model.upstream_id]);
+    const modelTestKey = (model, credential = $('modelTestCredential').value) => JSON.stringify([model.id, model.upstream_id, credential]);
+    function modelTestHTML(test) {
+      if (!test) return '';
+      if (test.pending) return '<div class="model-test-result"><span class="subtext" role="status">正在连接 Cline，等待完整响应…</span></div>';
+      const elapsed = Number(test.duration_ms);
+      const time = Number.isFinite(elapsed) ? `${elapsed.toLocaleString()} ms` : '—';
+      const tone = !test.ok || elapsed >= 10000 ? 'bad' : elapsed >= 3000 ? 'warn' : 'good';
+      const label = test.ok ? '可用' : test.status === 504 ? '超时' : '失败';
+      const error = String(test.error || '');
+      const summary = error.split(/\r?\n/).find((line) => line.trim()) || '测试失败';
+      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
+    }
+    function renderModelRows() {
+      const credential = $('modelTestCredential').value;
+      $('modelList').innerHTML = state.models.length ? state.models.map((model, index) => {
+        const test = modelTestResults.get(modelTestKey(model));
+        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><div class="row-actions"><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending ? 'disabled' : ''}>${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">删除</button></div>${modelTestHTML(test)}</div>`;
+      }).join('') : '<div class="empty">暂无模型映射</div>';
+    }
+    function syncModelTestCredentials() {
+      const field = $('modelTestCredential');
+      const selected = field.value;
+      const enabled = credentialView.items.filter((item) => item.enabled !== false);
+      field.replaceChildren(...(enabled.length ? enabled.map((item) => new Option(`${item.label || item.id} · ${item.id}`, item.id)) : [new Option('请先添加并启用凭据', '')]));
+      if (enabled.some((item) => item.id === selected)) field.value = selected;
+      dropdowns.get('modelTestCredential').sync();
+      renderModelRows();
+    }
+    $('modelTestCredential').addEventListener('change', renderModelRows);
+    async function testMappedModel(model) {
+      const credentialID = $('modelTestCredential').value;
+      const key = modelTestKey(model, credentialID);
+      if (!credentialID || modelTestResults.get(key)?.pending) return;
+      modelTestResults.set(key, { pending: true });
+      renderModelRows();
+      const started = performance.now();
+      try {
+        const result = await api('/models/test', { method: 'POST', fullError: true, body: { model: model.id, upstream_id: model.upstream_id, credential_id: credentialID } });
+        if (typeof result?.ok !== 'boolean') throw new Error('测试接口返回了无效结果');
+        modelTestResults.set(key, result);
+      } catch (error) {
+        modelTestResults.set(key, { ok: false, error: error.message, duration_ms: Math.round(performance.now() - started), credential_id: credentialID, tested_at: new Date().toISOString() });
+      } finally { renderModelRows(); }
+    }
     function candidateChanges(models = state.candidateSnapshot) {
       const initial = new Set(state.candidateSnapshot.map(modelKey));
       const removed = new Set(state.modelCandidates.filter((m) => initial.has(modelKey(m)) && !state.selectedCandidates.has(modelKey(m))).map(modelKey));
@@ -729,6 +788,7 @@
         const ids = new Set(credentialView.items.map((item) => item.id));
         for (const id of credentialView.usage.keys()) if (!ids.has(id)) credentialView.usage.delete(id);
         for (const id of credentialView.pending.keys()) if (!ids.has(id)) credentialView.pending.delete(id);
+        syncModelTestCredentials();
       }
       if (focusID) {
         $('credentialSearch').value = '';
@@ -946,11 +1006,13 @@
       if (state.modelBusy || state.fetchingModels) return;
       const edit = event.target.closest('.edit-model');
       const remove = event.target.closest('.delete-model');
-      const button = edit || remove;
+      const test = event.target.closest('.test-model');
+      const button = edit || remove || test;
       if (!button) return;
       const index = Number(button.dataset.index);
       const model = state.models[index];
       if (!model) return;
+      if (test) { await testMappedModel({ ...model }); return; }
       if (edit) {
         openModelDialog(index);
         return;

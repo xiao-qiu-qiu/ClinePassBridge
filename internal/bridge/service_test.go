@@ -111,6 +111,7 @@ func registeredService(t *testing.T, mode string) *Service {
 	t.Helper()
 	s := NewService()
 	configYAML := fmt.Sprintf("data_dir: %q\n", filepath.ToSlash(t.TempDir()))
+	configYAML += "models:\n  - id: deepseek-flash\n    upstream_id: cline-pass/deepseek-v4.1-flash\n"
 	if mode != "" {
 		configYAML += fmt.Sprintf("nonstream_mode: %s\n", mode)
 	}
@@ -782,7 +783,7 @@ func TestCatalogRefreshUsesPassOffersAndPreservesAliases(t *testing.T) {
 		t.Fatalf("unexpected Pass candidates: %#v", response.Models)
 	}
 	models := s.config().Models
-	if len(models) != 4 || !bytes.Equal(jsonBytes(models), jsonBytes(originalModels)) || len(savedAuth) != 0 {
+	if len(models) != 2 || !bytes.Equal(jsonBytes(models), jsonBytes(originalModels)) || len(savedAuth) != 0 {
 		t.Fatalf("candidate refresh changed registered models or saved auth: models=%#v saved=%#v", models, savedAuth)
 	}
 	if _, err := os.Stat(filepath.Join(s.config().DataDir, "settings.json")); !os.IsNotExist(err) {
@@ -800,7 +801,7 @@ func TestCatalogRefreshUsesPassOffersAndPreservesAliases(t *testing.T) {
 	for _, model := range models {
 		byID[model.ID] = model
 	}
-	if len(models) != 5 || byID["my-deepseek-alias"].UpstreamID != "cline-pass/deepseek-v4.1-flash" || byID["new-offer"].UpstreamID != "cline-pass/new-offer" {
+	if len(models) != 3 || byID["my-deepseek-alias"].UpstreamID != "cline-pass/deepseek-v4.1-flash" || byID["new-offer"].UpstreamID != "cline-pass/new-offer" {
 		t.Fatalf("selected model lost alias/Pass offer: %#v", models)
 	}
 	if _, exists := byID["byok-only-model"]; exists {
