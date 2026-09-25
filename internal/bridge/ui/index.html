@@ -16,6 +16,7 @@
       --muted: #6d6760; --line: #d5d2cb; --accent: #8b8680; --accent-hover: #7f7a74; --accent-ink: #fff;
       --success: #087c54; --warn: #985d0a; --danger: #b8493a; --focus: #726d67;
       --inset-bg: color-mix(in srgb, var(--surface-2) 35%, var(--surface));
+      --inset-line: color-mix(in srgb, var(--line) 75%, var(--surface));
       --code-bg: #f0eee8; --shadow: 0 1px 2px rgba(0, 0, 0, .08);
     }
     :root[data-theme="white"] { --bg: #fff; --surface: #fff; --surface-2: #f6f6f6; --line: #d9d9d9; --code-bg: #f6f6f6; }
@@ -53,6 +54,7 @@
     .summary-scope { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
     .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .summary-item { padding: 14px 16px; min-width: 0; background: var(--inset-bg); border-radius: 8px; }
+    .summary-item, .model-row, .credential-row { border: 1px solid var(--inset-line); }
     .summary-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
     .summary-value { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     .summary-note { color: var(--muted); font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
@@ -133,7 +135,7 @@
     .usage-reset { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
     .usage-status { margin-top: 7px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
     .usage-status.stale { color: var(--warn); }
-    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 2px; }
+    .credential-bottom { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--inset-line); }
     .credential-plan { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .credential-bottom .button { min-height: 28px; font-size: 11px; }
     .credential-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
