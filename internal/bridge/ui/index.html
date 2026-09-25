@@ -60,7 +60,7 @@
     .notice { margin: 14px 0 0; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); border-left: 3px solid var(--warn); border-radius: 4px; color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
     .notice.error { border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
     .notice[hidden], [hidden] { display: none !important; }
-    .tabs { display: flex; gap: 8px; margin: 18px 0 24px; padding: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, var(--bg)); }
+    .tabs { display: flex; gap: 8px; margin: 6px 0 24px; padding: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, var(--bg)); }
     .tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: 10px 10px 0 0; background: transparent; color: var(--muted); padding: 11px 16px; font-weight: 600; transition: background .16s, color .16s; }
     .tab svg { width: 16px; height: 16px; flex: none; }
     .tab:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 3%, var(--bg)); }
@@ -125,7 +125,7 @@
     .usage-track { height: 6px; margin: 8px 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--line) 65%, var(--surface)); overflow: hidden; }
     .usage-fill { display: block; height: 100%; background: var(--success); border-radius: inherit; }
     .usage-meter.good strong { color: var(--success); }
-    .usage-meter.warn .usage-fill { background: var(--warn); }
+    .usage-meter.warn .usage-fill { background: #d8b45c; }
     .usage-meter.bad .usage-fill { background: var(--danger); }
     .usage-meter.warn strong { color: var(--warn); }
     .usage-meter.bad strong { color: var(--danger); }
