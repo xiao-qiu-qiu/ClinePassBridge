@@ -65,6 +65,9 @@ func (l *rateLimiter) acquire(c Credential, model string) (*rateLease, error) {
 		if state.probe != nil && !now.Before(until) {
 			until, reason = now.Add(time.Second), "upstream recovery probe in progress"
 		}
+		// A locally suppressed request never reached the upstream, so it has no
+		// provider of its own and must not borrow the one from the 429 that
+		// opened the window. The UI labels these rows from UpstreamSkipped.
 		return nil, &upstreamError{APIError: &APIError{429, "upstream_team_rate_limited", fmt.Sprintf("%s Upstream shared team/region token rate limit. Retry after %ds. %s; no upstream request sent", rateLimitMarker, retrySeconds(until, now), reason)}, RetryAt: until, Scope: state.scope, Local: true}
 	}
 	state.probe = lease

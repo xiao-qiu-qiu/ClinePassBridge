@@ -16,6 +16,11 @@ const rateLimitMarker = "[clinepassbridge:team_tpm_limit]"
 var wrappedRateLimit = regexp.MustCompile(`(?is)request failed with status 429:\s*.*rate limit exceeded`)
 var retrySecondsPattern = regexp.MustCompile(`(?i)retry after\s+(\d+(?:\.\d+)?)\s*s\b`)
 
+// Vercel reports the provider it routed to inside the response body. Failures
+// carry the same routing block as successes, but nested in the error text, so
+// the structured lookup is only a fallback-safe first attempt.
+var resolvedProviderPattern = regexp.MustCompile(`"resolvedProvider"\s*:\s*"([^"]+)"`)
+
 // Upstream errors retain the transport status separately from the error inside
 // a successful SSE response. The stable marker is matched by CPA's auth rules.
 type upstreamError struct {
@@ -25,6 +30,23 @@ type upstreamError struct {
 	RetryAt        time.Time
 	Scope          string
 	Local          bool
+	Provider       string
+	ProviderSource string
+}
+
+// routingFacts recovers which upstream provider served or refused the request.
+// Only explicit routing statements count; candidate lists never do.
+func routingFacts(body map[string]any) (string, string) {
+	routing := object(object(object(body["providerMetadata"])["gateway"])["routing"])
+	for _, key := range []string{"resolvedProvider", "finalProvider"} {
+		if p := str(routing[key]); p != "" {
+			return p, "providerMetadata.gateway.routing." + key
+		}
+	}
+	if m := resolvedProviderPattern.FindStringSubmatch(errorMessage(body)); len(m) == 2 {
+		return m[1], "error.message.resolvedProvider"
+	}
+	return "", ""
 }
 
 func classifyUpstreamError(httpStatus int, headers http.Header, body map[string]any, now time.Time, fallback ...int) error {
@@ -77,6 +99,7 @@ func classifyUpstreamError(httpStatus int, headers http.Header, body map[string]
 		kind = "upstream_auth_error"
 	}
 	result.APIError = &APIError{Status: status, Kind: kind, Message: message}
+	result.Provider, result.ProviderSource = routingFacts(body)
 	return result
 }
 
@@ -150,10 +173,19 @@ func logErrorDetails(entry *LogEntry, attempt *Attempt, err error) {
 	if !detail.RetryAt.IsZero() {
 		entry.RetryAt = &detail.RetryAt
 	}
+	// A failed request still says which provider refused it. Only fill a gap:
+	// a provider already read from a successful frame is more specific.
+	provider, source := detail.Provider, detail.ProviderSource
+	if provider != "" && (entry.Provider == "" || entry.Provider == "unknown") {
+		entry.Provider, entry.ProviderSource = provider, source
+	}
 	if attempt != nil {
 		attempt.ErrorKind = entry.ErrorKind
 		attempt.UpstreamHTTPStatus = entry.UpstreamHTTPStatus
 		attempt.UpstreamErrorStatus = entry.UpstreamErrorStatus
 		attempt.UpstreamSkipped = entry.UpstreamSkipped
+		if provider != "" && (attempt.Provider == "" || attempt.Provider == "unknown") {
+			attempt.Provider, attempt.ProviderSource = provider, source
+		}
 	}
 }

@@ -9,9 +9,43 @@ import (
 	"time"
 )
 
-const Version = "0.1.9"
+const Version = "0.2.5"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
+
+// How a client-supplied provider preference interacts with the per-model one.
+const (
+	// ProviderPolicyClient lets the caller's own gateway options win. Default.
+	ProviderPolicyClient = "client"
+	// ProviderPolicyConfig pins every request to the configured providers and
+	// rejects caller overrides.
+	ProviderPolicyConfig = "config"
+)
+
+// A pinned set is a routing allow-list, not a budget. Keep it small enough to
+// stay reviewable in the UI.
+const maxModelProviders = 8
+
+// localBackoffLabel is the label the UI shows, and filters by, for a request the
+// plugin suppressed locally. Such a request never reached an upstream, so it has
+// no provider of its own.
+const localBackoffLabel = "本地退避"
+
+// maxCredentialPriority bounds the value handed to CPA's scheduler.
+const maxCredentialPriority = 100
+
+// normalizedPriority treats zero, negative and absent alike as "no preference",
+// so the plugin only ever forwards a real ordering choice.
+func normalizedPriority(value *int) *int {
+	if value == nil || *value <= 0 {
+		return nil
+	}
+	n := *value
+	if n > maxCredentialPriority {
+		n = maxCredentialPriority
+	}
+	return &n
+}
 
 type APIError struct {
 	Status  int
@@ -61,6 +95,9 @@ type Credential struct {
 	APIKey              string             `json:"api_key"`
 	Disabled            bool               `json:"disabled"`
 	ProxyURL            string             `json:"proxy_url,omitempty"`
+	// Priority is forwarded to CPA, which schedules higher values first.
+	// Absent (nil) means "no preference"; the plugin does not invent one.
+	Priority *int `json:"priority,omitempty"`
 	RequestScopedErrors []RequestErrorRule `json:"request_scoped_errors"`
 	ModelRevision       string             `json:"model_revision,omitempty"`
 }
@@ -87,13 +124,14 @@ type Config struct {
 	BaseURL          string  `json:"base_url" yaml:"base_url"`
 	Models           []Model `json:"models" yaml:"models"`
 	NonstreamMode    string  `json:"nonstream_mode" yaml:"nonstream_mode"`
+	ProviderPolicy   string  `json:"provider_policy" yaml:"provider_policy"`
 	TimeoutSeconds   int     `json:"timeout_seconds" yaml:"timeout_seconds"`
 	LogRetention     int     `json:"log_retention" yaml:"log_retention"`
 	MaxResponseBytes int     `json:"max_response_bytes" yaml:"max_response_bytes"`
 }
 
 func defaultConfig() Config {
-	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{}, NonstreamMode: "stream-aggregate", TimeoutSeconds: 600, LogRetention: 1000, MaxResponseBytes: 16 << 20}
+	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{}, NonstreamMode: "stream-aggregate", ProviderPolicy: ProviderPolicyConfig, TimeoutSeconds: 600, LogRetention: 1000, MaxResponseBytes: 16 << 20}
 }
 func (c *Config) validate() error {
 	u, e := url.Parse(c.BaseURL)
@@ -112,6 +150,15 @@ func (c *Config) validate() error {
 	if c.NonstreamMode != "native" && c.NonstreamMode != "native-fallback" && c.NonstreamMode != "stream-aggregate" {
 		return fail(400, "invalid nonstream_mode")
 	}
+	// Settings written before this field existed carry no value. Default to the
+	// configured list deciding, so an unconfigured install cannot have its
+	// routing changed by whatever a caller happens to send.
+	if c.ProviderPolicy == "" {
+		c.ProviderPolicy = ProviderPolicyConfig
+	}
+	if c.ProviderPolicy != ProviderPolicyClient && c.ProviderPolicy != ProviderPolicyConfig {
+		return fail(400, "provider_policy must be client or config")
+	}
 	seen := map[string]bool{}
 	for i := range c.Models {
 		m := &c.Models[i]
@@ -121,6 +168,47 @@ func (c *Config) validate() error {
 		seen[m.ID] = true
 		if strings.TrimSpace(m.UpstreamID) == "" || strings.ContainsAny(m.ID+m.UpstreamID, "\r\n\t") {
 			return fail(400, "model identifiers must be nonempty and contain no control whitespace")
+		}
+		// A fresh install pins DeepSeek models to the vendor's own endpoint.
+		// An explicit empty list means the operator cleared it, so only a
+		// never-set field is defaulted.
+		if m.Providers == nil {
+			m.Providers = defaultProvidersFor(m.ID, m.UpstreamID)
+		}
+		if len(m.Providers) > maxModelProviders {
+			return fail(400, "a model can pin at most 8 upstream providers")
+		}
+		pinned := map[string]bool{}
+		for n, raw := range m.Providers {
+			slug := strings.ToLower(strings.TrimSpace(raw))
+			if slug == "" || strings.ContainsAny(slug, " \r\n\t") {
+				return fail(400, "upstream providers must be nonempty slugs without whitespace")
+			}
+			if pinned[slug] {
+				return fail(400, "upstream providers must be unique within a model")
+			}
+			pinned[slug] = true
+			m.Providers[n] = slug
+		}
+	}
+	return nil
+}
+
+// defaultProvidersFor supplies the initial allow-list for a model that has never
+// been pinned. Only DeepSeek is seeded; other models keep automatic routing.
+func defaultProvidersFor(id, upstreamID string) []string {
+	if strings.Contains(strings.ToLower(id+" "+upstreamID), "deepseek") {
+		return []string{"deepseek"}
+	}
+	return nil
+}
+
+// pinnedProviders returns the configured allow-list for a client-facing model
+// alias, preserving the configured order as the priority order.
+func (c Config) pinnedProviders(alias string) []string {
+	for _, m := range c.Models {
+		if m.ID == alias {
+			return append([]string{}, m.Providers...)
 		}
 	}
 	return nil

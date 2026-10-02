@@ -332,11 +332,33 @@ func (s *Service) appendLog(entry LogEntry) {
 }
 func (s *Service) credentials() []map[string]any {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := []map[string]any{}
+	creds := make([]Credential, 0, len(s.creds))
 	for _, c := range s.creds {
-		out = append(out, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled})
+		creds = append(creds, c)
 	}
-	sort.Slice(out, func(i, j int) bool { return str(out[i]["id"]) < str(out[j]["id"]) })
+	s.mu.RUnlock()
+	// Highest priority first, then the operator's own label, then the id: a
+	// stable, predictable order rather than map iteration order.
+	sort.Slice(creds, func(i, j int) bool {
+		left, right := priorityValue(creds[i]), priorityValue(creds[j])
+		if left != right {
+			return left > right
+		}
+		if creds[i].Label != creds[j].Label {
+			return creds[i].Label < creds[j].Label
+		}
+		return creds[i].ID < creds[j].ID
+	})
+	out := []map[string]any{}
+	for _, c := range creds {
+		out = append(out, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled, "priority": c.Priority})
+	}
 	return out
+}
+
+func priorityValue(c Credential) int {
+	if c.Priority == nil {
+		return 0
+	}
+	return *c.Priority
 }

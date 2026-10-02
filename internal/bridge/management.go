@@ -23,7 +23,7 @@ func (s *Service) registerManagement(raw json.RawMessage) (any, error) {
 	for _, p := range []string{"status", "logs", "models", "config", "credentials", "credentials/usage"} {
 		routes = append(routes, map[string]string{"Method": "GET", "Path": apiBase + "/" + p})
 	}
-	for _, p := range []string{"models/refresh", "models/test", "credentials"} {
+	for _, p := range []string{"models/refresh", "models/test", "models/providers", "credentials"} {
 		routes = append(routes, map[string]string{"Method": "POST", "Path": apiBase + "/" + p})
 	}
 	for _, p := range []string{"models", "config", "credentials"} {
@@ -111,6 +111,8 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(200, map[string]any{"models": models})
 	case "POST /models/test":
 		return s.testModel(r)
+	case "POST /models/providers":
+		return s.discoverProviders(r)
 	case "GET /credentials":
 		return managementJSON(200, map[string]any{"items": s.credentials()})
 	case "GET /credentials/usage":
@@ -161,7 +163,7 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error), search) {
 			continue
 		}
-		if provider != "" && provider != "all" && !strings.EqualFold(provider, v.Provider) {
+		if provider != "" && provider != "all" && !matchesProvider(provider, v) {
 			continue
 		}
 		if status != "" && status != "all" {
@@ -195,12 +197,22 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 	}
 	return managementJSON(200, map[string]any{"items": filtered[offset:end], "total": total, "summary": summary})
 }
+// matchesProvider lets the UI filter by the label it shows for a locally
+// suppressed request, which has no upstream provider of its own.
+func matchesProvider(filter string, entry LogEntry) bool {
+	if filter == localBackoffLabel {
+		return entry.UpstreamSkipped
+	}
+	return strings.EqualFold(filter, entry.Provider)
+}
+
 func (s *Service) importCredential(r ManagementRequest) (any, error) {
 	s.credentialMu.Lock()
 	defer s.credentialMu.Unlock()
 	var in struct {
-		Label  string `json:"label"`
-		APIKey string `json:"api_key"`
+		Label    string `json:"label"`
+		APIKey   string `json:"api_key"`
+		Priority *int   `json:"priority"`
 	}
 	if e := json.Unmarshal(r.Body, &in); e != nil {
 		return managementJSON(400, map[string]any{"error": "invalid credential JSON"})
@@ -212,7 +224,7 @@ func (s *Service) importCredential(r ManagementRequest) (any, error) {
 	if len(in.Label) > 100 {
 		return managementJSON(400, map[string]any{"error": "label exceeds 100 characters"})
 	}
-	c := Credential{Type: Provider, ID: PluginID + "-" + id(), Label: strings.TrimSpace(in.Label), APIKey: in.APIKey, RequestScopedErrors: requestErrorRules()}
+	c := Credential{Type: Provider, ID: PluginID + "-" + id(), Label: strings.TrimSpace(in.Label), APIKey: in.APIKey, RequestScopedErrors: requestErrorRules(), Priority: normalizedPriority(in.Priority)}
 	if c.Label == "" {
 		c.Label = "Cline Pass"
 	}
@@ -235,8 +247,9 @@ func (s *Service) updateCredential(r ManagementRequest) (any, error) {
 	s.credentialMu.Lock()
 	defer s.credentialMu.Unlock()
 	var in struct {
-		Label  *string `json:"label"`
-		APIKey *string `json:"api_key"`
+		Label    *string `json:"label"`
+		APIKey   *string `json:"api_key"`
+		Priority *int    `json:"priority"`
 	}
 	if e := json.Unmarshal(r.Body, &in); e != nil {
 		return managementJSON(400, map[string]any{"error": "invalid credential JSON"})
@@ -258,6 +271,9 @@ func (s *Service) updateCredential(r ManagementRequest) (any, error) {
 			c.Label = "Cline Pass"
 		}
 	}
+	if in.Priority != nil {
+		c.Priority = normalizedPriority(in.Priority)
+	}
 	if in.APIKey != nil && strings.TrimSpace(*in.APIKey) != "" {
 		key := strings.TrimSpace(*in.APIKey)
 		if len(key) < 8 || strings.ContainsAny(key, "\r\n") {
@@ -278,7 +294,7 @@ func (s *Service) updateCredential(r ManagementRequest) (any, error) {
 	s.mu.Lock()
 	s.creds[id] = c
 	s.mu.Unlock()
-	return managementJSON(200, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled})
+	return managementJSON(200, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled, "priority": c.Priority})
 }
 func (s *Service) deleteCredential(credentialID string) (any, error) {
 	s.credentialMu.Lock()

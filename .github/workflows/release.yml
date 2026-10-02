@@ -18,6 +18,11 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test management login reuse
+        run: node --test tests/cpa-auth.test.cjs
       - name: Check plugin and registry versions
         id: version
         shell: bash

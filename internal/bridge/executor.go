@@ -40,14 +40,58 @@ func (s *Service) prepare(r ExecutorRequest) (map[string]any, Credential, string
 		return nil, c, "", fail(400, "messages must be a nonempty array")
 	}
 	j["model"] = up
-	// Current Pass planner silently ignores these. Never preserve a false promise of strict routing.
-	if p := object(j["provider"]); len(p) > 0 {
-		return nil, c, "", fail(400, "provider pinning is unavailable for this Cline Pass integration")
-	}
-	if p := object(object(j["providerOptions"])["gateway"]); len(p) > 0 {
-		return nil, c, "", fail(400, "providerOptions.gateway pinning is currently ignored by Cline; use automatic routing")
-	}
+	s.applyProviderRouting(j, r.Model)
 	return j, c, up, nil
+}
+
+// applyProviderRouting writes the per-model provider allow-list into the
+// outgoing body. Cline forwards providerOptions.gateway to Vercel AI Gateway
+// untouched, which makes the list an allow-list (`only`) with a priority order
+// (`order`) there. Models without a configured list keep the automatic routing
+// they had before this existed.
+func (s *Service) applyProviderRouting(j map[string]any, alias string) {
+	cfg := s.config()
+	pinned := cfg.pinnedProviders(alias)
+	// Chat Completions accepts a top-level provider shorthand for the same
+	// fields. Fold it into providerOptions.gateway so there is one channel to
+	// reason about, and so the copy below cannot disagree with itself.
+	gateway := map[string]any{}
+	for k, v := range object(object(j["providerOptions"])["gateway"]) {
+		gateway[k] = v
+	}
+	for k, v := range object(j["provider"]) {
+		if _, ok := gateway[k]; !ok {
+			gateway[k] = v
+		}
+	}
+	delete(j, "provider")
+	if cfg.ProviderPolicy == ProviderPolicyConfig {
+		// The configured list decides. A caller's hint is dropped rather than
+		// failing the request over something it cannot influence.
+		gateway = map[string]any{}
+	}
+	// The caller wins key by key; the configured list fills what it left out.
+	if _, ok := gateway["only"]; !ok && len(pinned) > 0 {
+		gateway["only"] = pinned
+	}
+	if _, ok := gateway["order"]; !ok && len(pinned) > 0 {
+		gateway["order"] = pinned
+	}
+	// Other provider namespaces in providerOptions must survive, but the
+	// gateway sub-key is owned by this function from here on.
+	opts := object(j["providerOptions"])
+	if opts != nil {
+		delete(opts, "gateway")
+	}
+	if len(gateway) == 0 {
+		delete(j, "providerOptions")
+		return
+	}
+	if opts == nil {
+		opts = map[string]any{}
+	}
+	opts["gateway"] = gateway
+	j["providerOptions"] = opts
 }
 func headers(c Credential) http.Header {
 	return http.Header{"Authorization": []string{"Bearer " + c.APIKey}, "Content-Type": []string{"application/json"}, "User-Agent": []string{"ClinePassBridge/" + Version}}
