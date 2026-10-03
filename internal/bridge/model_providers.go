@@ -79,6 +79,7 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 	}
 	if err == nil {
 		var stream upstreamStream
+		*entry.UpstreamAttempts++
 		stream, err = s.request(req, credential, j, true, diagnostics)
 		if err == nil {
 			_, err = s.consumeSSE(stream, in.Model, &entry, &attempt, start, nil)
@@ -98,9 +99,9 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 	note := ""
 	switch {
 	case len(candidates) > 0:
-		note = "上游回报的候选托管方（已含本次实际使用的一家；探测不带固定）"
+		note = "上游回报的候选托管方"
 	case served != "":
-		note = "上游只回报了本次实际使用的托管方，没有候选列表；该账号可能被转到私有通道"
+		note = "上游只回报了本次实际使用的托管方，没有候选列表；该账号可能无法钉上游"
 	default:
 		note = "上游没有回报任何托管方，无法固定"
 	}

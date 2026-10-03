@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,30 +18,35 @@ import (
 var secretPattern = regexp.MustCompile(`(?i)(?:bearer\s+|sk[-_])[a-z0-9_.-]+`)
 
 type Service struct {
-	rateLimits          rateLimiter
-	credentialMu        sync.Mutex
-	authFiles           map[string]string
-	mu                  sync.RWMutex
-	cfg                 Config
-	host                HostCall
-	logs                []LogEntry
-	creds               map[string]Credential
-	authDir             string
-	loaded              bool
-	stopped             bool
-	active              sync.WaitGroup
-	streams             map[string]struct{}
-	revoked             map[string]bool
-	stopCh              chan struct{}
-	logWriteError       string
-	usageCache          map[string]*usageCacheEntry
-	usageSlots          chan struct{}
-	usageSamplerStarted bool
-	usageWake           chan struct{}
-	modelTests          map[string]bool
-	estimates           estimateState
-	estimateActivity    map[string]estimateActivity
-	estimateWriteError  string
+	rateLimits           rateLimiter
+	credentialMu         sync.Mutex
+	authFiles            map[string]string
+	mu                   sync.RWMutex
+	cfg                  Config
+	host                 HostCall
+	logs                 []LogEntry
+	creds                map[string]Credential
+	authDir              string
+	loaded               bool
+	stopped              bool
+	active               sync.WaitGroup
+	streams              map[string]struct{}
+	revoked              map[string]bool
+	stopCh               chan struct{}
+	logWriteError        string
+	observationTimer     *time.Timer
+	logsDirty            bool
+	statistics           statisticsState
+	statisticsLoaded     bool
+	statisticsWriteError string
+	usageCache           map[string]*usageCacheEntry
+	usageSlots           chan struct{}
+	usageSamplerStarted  bool
+	usageWake            chan struct{}
+	modelTests           map[string]bool
+	estimates            estimateState
+	estimateActivity     map[string]estimateActivity
+	estimateWriteError   string
 }
 
 func NewService() *Service {
@@ -108,12 +112,26 @@ func (s *Service) configure(raw json.RawMessage) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.loaded && filepath.Clean(cfg.DataDir) != filepath.Clean(s.cfg.DataDir) {
+		return fail(409, "Changing data_dir requires restarting the plugin with its complete data directory")
+	}
+	if s.stopped {
+		// The host re-registers a quiesced instance when replacement fails.
+		// Reload persisted counters rather than reviving an obsolete snapshot.
+		s.stopped, s.loaded, s.statisticsLoaded, s.usageSamplerStarted = false, false, false, false
+		s.stopCh = make(chan struct{})
+		s.logs = nil
+	}
 	s.cfg = cfg
 	if !s.loaded {
 		s.loadEstimatesLocked()
 		if b, e := os.ReadFile(filepath.Join(cfg.DataDir, "requests.json")); e == nil {
 			_ = json.Unmarshal(b, &s.logs)
 		}
+		if e := s.loadStatisticsLocked(); e != nil {
+			return e
+		}
+		s.logs = compactBackoffLogs(s.logs)
 		s.loaded = true
 	}
 	if len(s.logs) > cfg.LogRetention {
@@ -157,7 +175,7 @@ func (s *Service) Handle(method string, raw json.RawMessage) (any, error) {
 		return s.registerManagement(raw)
 	case "management.handle":
 		return s.management(raw)
-	case "plugin.shutdown":
+	case "plugin.quiesce", "plugin.shutdown":
 		s.mu.Lock()
 		if !s.stopped {
 			close(s.stopCh)
@@ -172,6 +190,13 @@ func (s *Service) Handle(method string, raw json.RawMessage) (any, error) {
 			s.closeUpstream(stream)
 		}
 		s.active.Wait()
+		s.mu.Lock()
+		if s.observationTimer != nil {
+			s.observationTimer.Stop()
+			s.observationTimer = nil
+		}
+		s.flushObservationsLocked()
+		s.mu.Unlock()
 		return map[string]any{}, nil
 	default:
 		return nil, fail(400, "unsupported plugin method: "+method)
@@ -202,13 +227,7 @@ func (s *Service) refreshRegistrations() error {
 		// CPA skips unchanged files. A model revision makes watcher refreshes reliable.
 		c.ModelRevision = hex.EncodeToString(revision[:])
 		c.RequestScopedErrors = requestErrorRules()
-		s.mu.RLock()
-		filename := s.authFiles[c.ID]
-		s.mu.RUnlock()
-		if filename == "" {
-			filename = c.ID + ".json"
-		}
-		if e := s.call("host.auth.save", map[string]any{"name": filename, "json": json.RawMessage(jsonBytes(c))}, nil); e != nil {
+		if e := s.saveCredential(c); e != nil {
 			return e
 		}
 	}
@@ -240,7 +259,7 @@ func authData(c Credential, filename string) any {
 	// Metadata and stored auth JSON must agree, including after hot reload.
 	var rules []any
 	_ = json.Unmarshal(jsonBytes(c.RequestScopedErrors), &rules)
-	return map[string]any{"Provider": Provider, "ID": c.ID, "FileName": filename, "Label": c.Label, "Disabled": c.Disabled, "ProxyURL": c.ProxyURL, "StorageJSON": jsonBytes(c), "Metadata": map[string]any{"type": Provider, "request_scoped_errors": rules}, "Attributes": map[string]string{"auth_kind": "api_key"}}
+	return map[string]any{"Provider": Provider, "ID": routingID(c, filename), "FileName": filename, "Label": c.Label, "Disabled": c.Disabled, "ProxyURL": c.ProxyURL, "StorageJSON": jsonBytes(c), "Metadata": map[string]any{"type": Provider, "request_scoped_errors": rules}, "Attributes": map[string]string{"auth_kind": "api_key"}}
 }
 func (s *Service) parseAuth(raw json.RawMessage) (any, error) {
 	var r struct {
@@ -311,6 +330,13 @@ func (s *Service) selectedCredential(r ExecutorRequest) (Credential, error) {
 		c = current
 	} else if current, ok := s.creds[r.AuthID]; ok {
 		c = current
+	} else if c.ID == "" {
+		for _, current := range s.creds {
+			if routingID(current, s.authFiles[current.ID]) == r.AuthID {
+				c = current
+				break
+			}
+		}
 	}
 	revoked := s.revoked[c.ID] || s.revoked[r.AuthID]
 	s.mu.RUnlock()
@@ -324,11 +350,27 @@ func (s *Service) appendLog(entry LogEntry) {
 	defer s.mu.Unlock()
 	s.recordEstimateLocked(entry)
 	entry.Error = safeError(errors.New(entry.Error))
-	s.logs = append(s.logs, entry)
+	completedAt := time.Now().UTC()
+	entry.CompletedAt = &completedAt
+	if entry.Time.IsZero() {
+		entry.Time = time.Now().UTC()
+	}
+	entry.OutputTokensPerSecond = outputTokenRate(entry)
+	if entry.UpstreamSkipped {
+		entry.Attempts = nil
+	}
+	s.recordStatisticsLocked(entry)
+	var merged bool
+	s.logs, merged = mergeBackoffLog(s.logs, entry)
 	if len(s.logs) > s.cfg.LogRetention {
 		s.logs = s.logs[len(s.logs)-s.cfg.LogRetention:]
 	}
-	s.logWriteError = safeError(atomicJSON(filepath.Join(s.cfg.DataDir, "requests.json"), s.logs))
+	s.logsDirty = true
+	if merged {
+		s.scheduleObservationsLocked()
+	} else {
+		s.flushObservationsLocked()
+	}
 }
 func (s *Service) credentials() []map[string]any {
 	s.mu.RLock()
@@ -339,16 +381,7 @@ func (s *Service) credentials() []map[string]any {
 	s.mu.RUnlock()
 	// Highest priority first, then the operator's own label, then the id: a
 	// stable, predictable order rather than map iteration order.
-	sort.Slice(creds, func(i, j int) bool {
-		left, right := priorityValue(creds[i]), priorityValue(creds[j])
-		if left != right {
-			return left > right
-		}
-		if creds[i].Label != creds[j].Label {
-			return creds[i].Label < creds[j].Label
-		}
-		return creds[i].ID < creds[j].ID
-	})
+	sortCredentials(creds)
 	out := []map[string]any{}
 	for _, c := range creds {
 		out = append(out, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled, "priority": c.Priority})

@@ -240,7 +240,7 @@ func (s *Service) readJSON(up upstreamStream) ([]byte, error) {
 	return b.Bytes(), nil
 }
 func (s *Service) newLog(r ExecutorRequest, c Credential, up string) LogEntry {
-	return LogEntry{estimateKey: s.startEstimateRequest(c), CredentialID: c.ID, ID: id(), Time: time.Now().UTC(), Model: r.Model, UpstreamModel: up, Stream: r.Stream, Provider: "unknown", ProviderSource: "not_reported", Credential: c.Label, Attempts: []Attempt{}}
+	return LogEntry{UpstreamAttempts: new(int), estimateKey: s.startEstimateRequest(c), ReasoningEffort: requestReasoningEffort(r.Payload), CredentialID: c.ID, ID: id(), Time: time.Now().UTC(), Model: r.Model, UpstreamModel: up, Stream: r.Stream, Provider: "unknown", ProviderSource: "not_reported", Credential: c.Label, Attempts: []Attempt{}}
 }
 func (s *Service) execute(r ExecutorRequest) (any, error) {
 	if err := s.begin(); err != nil {
@@ -278,6 +278,7 @@ func (s *Service) execute(r ExecutorRequest) (any, error) {
 		}
 		t := time.Now()
 		var us upstreamStream
+		*entry.UpstreamAttempts++
 		us, e = s.request(r, c, j, wantStream)
 		if e == nil {
 			if wantStream {
@@ -420,6 +421,7 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 	if e != nil {
 		return failEarly(e)
 	}
+	*entry.UpstreamAttempts++
 	us, e := s.request(r, c, j, true)
 	if e != nil {
 		return failEarly(e)

@@ -13,6 +13,7 @@ type rateKey struct {
 }
 
 type rateWindow struct {
+	id      string
 	retryAt time.Time
 	scope   string
 	probe   *rateLease
@@ -68,7 +69,7 @@ func (l *rateLimiter) acquire(c Credential, model string) (*rateLease, error) {
 		// A locally suppressed request never reached the upstream, so it has no
 		// provider of its own and must not borrow the one from the 429 that
 		// opened the window. The UI labels these rows from UpstreamSkipped.
-		return nil, &upstreamError{APIError: &APIError{429, "upstream_team_rate_limited", fmt.Sprintf("%s Upstream shared team/region token rate limit. Retry after %ds. %s; no upstream request sent", rateLimitMarker, retrySeconds(until, now), reason)}, RetryAt: until, Scope: state.scope, Local: true}
+		return nil, &upstreamError{APIError: &APIError{429, "upstream_team_rate_limited", fmt.Sprintf("%s Upstream shared team/region token rate limit. Retry after %ds. %s; no upstream request sent", rateLimitMarker, retrySeconds(until, now), reason)}, RetryAt: until, Scope: state.scope, Local: true, WindowID: state.id}
 	}
 	state.probe = lease
 	lease.state, lease.epoch = state, state.epoch
@@ -85,7 +86,7 @@ func (lease *rateLease) finish(err error) {
 	state := l.windows[lease.key]
 	if limited := asTeamRateLimit(err); limited != nil && !limited.Local {
 		if state == nil {
-			state = &rateWindow{}
+			state = &rateWindow{id: id()}
 			l.windows[lease.key] = state
 		}
 		if limited.RetryAt.After(state.retryAt) {

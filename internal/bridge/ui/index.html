@@ -53,7 +53,7 @@
     button { cursor: pointer; }
     button:disabled { cursor: not-allowed; opacity: .55; }
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-    .shell { max-width: 1360px; margin: 0 auto; padding: 16px clamp(16px, 3vw, 40px) 56px; }
+    .shell { max-width: 1580px; margin: 0 auto; padding: 16px clamp(16px, 3vw, 40px) 40px; }
     .topbar, .heading, .section-head, .toolbar, .pagination, .row-main, .detail-head, .field-line, .credential-row, .model-row { display: flex; align-items: center; gap: 12px; }
     .topbar { min-height: 40px; }
     .brand { display: flex; align-items: center; gap: 11px; min-width: 0; font-weight: 700; font-size: 15px; }
@@ -70,6 +70,9 @@
     .button.danger { background: #c65746; border-color: #c65746; color: #fff; }
     .button.danger:hover:not(:disabled) { background: #ae4738; border-color: #ae4738; }
     .button.compact { min-height: 32px; padding: 4px 9px; font-size: 12px; }
+    .button.reassign { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; background: var(--ink); border-color: var(--ink); color: var(--surface); }
+    .button.reassign:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 85%, var(--surface)); border-color: var(--ink); }
+    .button.reassign svg { width: 17px; height: 17px; flex: none; }
     .button.icon { width: 38px; padding: 0; display: grid; place-items: center; font-size: 19px; line-height: 1; }
     .button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
     .button.ghost:hover { color: var(--ink); background: var(--surface-2); }
@@ -77,15 +80,25 @@
     .badge.good { background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); }
     .badge.warn { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn); }
     .badge.bad { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
-    .summary-scope { color: var(--muted); font-size: 12px; margin: 2px 0 10px; }
+    .statistics-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 2px 0 12px; }
+    .statistics-scope { color: var(--muted); font-size: 12px; }
+    .statistics-segments { display: flex; max-width: 100%; overflow-x: auto; padding: 3px; gap: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--inset-bg); }
+    .statistics-segment { flex: none; min-height: 32px; padding: 5px 11px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; transition: background .16s, color .16s; }
+    .statistics-segment:hover { background: var(--surface-2); color: var(--ink); }
+    .statistics-segment[aria-pressed="true"] { background: var(--surface); color: var(--ink); border-color: var(--inset-line); box-shadow: var(--shadow); font-weight: 600; }
+    .statistics-custom { display: flex; order: 1; flex-basis: 100%; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+    .statistics-custom label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; min-width: 0; }
+    .statistics-custom input { width: 190px; max-width: 100%; }
+    .statistics-alert { color: var(--danger); font-size: 12px; }
     .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .summary-item { padding: 14px 16px; min-width: 0; background: var(--inset-bg); border-radius: 8px; }
     .summary-item, .model-row, .credential-row { border: 1px solid var(--inset-line); }
     .summary-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
     .summary-value { font-weight: 700; font-size: 17px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
     .summary-note { color: var(--muted); font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
-    .log-controls { margin-bottom: 24px; }
-    .log-controls .toolbar { margin-bottom: 18px; }
+    .rate-history-hint { display: inline-grid; place-items: center; width: 15px; height: 15px; margin-left: 4px; border: 1px solid currentColor; border-radius: 50%; color: var(--warn); font-size: 10px; cursor: help; }
+    .panel.log-controls { padding: 16px; margin-bottom: 16px; }
+    .log-controls .toolbar { margin-bottom: 12px; }
     .notice { margin: 14px 0 0; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--line)); border-left: 3px solid var(--warn); border-radius: 4px; color: var(--ink); background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
     .notice.error { border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
     .notice[hidden], [hidden] { display: none !important; }
@@ -110,14 +123,28 @@
     .search { width: min(330px, 100%); flex: 1 1 220px; }
     .toolbar .dropdown { flex: 0 1 155px; }
     .count { margin-left: auto; color: var(--muted); white-space: nowrap; font-size: 12px; }
-    .log-head { display: grid; grid-template-columns: minmax(145px, 1.1fr) minmax(180px, 1.45fr) minmax(90px, .6fr) minmax(170px, 1.35fr) minmax(112px, .8fr) minmax(128px, .9fr) 26px; gap: 16px; padding: 0 15px 9px; color: var(--muted); font-size: 11px; font-weight: 700; }
-    .log-list { display: grid; gap: 10px; }
+    .log-head { display: grid; grid-template-columns: var(--log-columns); gap: 8px; padding: 0 13px 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    #logsPanel { --log-columns: 138px minmax(230px, 1fr) 76px 116px 100px 130px 118px minmax(150px, .7fr) 16px; max-width: 1500px; margin-inline: auto; }
+    .log-list { display: grid; gap: 6px; }
     .log-entry { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
     .log-entry[open] { background: var(--inset-bg); box-shadow: inset 3px 0 var(--accent); }
     .log-entry > summary { list-style: none; cursor: pointer; }
     .log-entry > summary::-webkit-details-marker { display: none; }
-    .row-main { display: grid; grid-template-columns: minmax(145px, 1.1fr) minmax(180px, 1.45fr) minmax(90px, .6fr) minmax(170px, 1.35fr) minmax(112px, .8fr) minmax(128px, .9fr) 26px; gap: 16px; padding: 14px 15px; align-items: start; }
+    .row-main { display: grid; grid-template-columns: var(--log-columns); gap: 8px; min-height: 78px; padding: 12px; align-items: center; font-size: 12px; line-height: 1.4; }
+    .row-main .subtext { font-size: 11px; margin-top: 4px; }
+    .log-latency { display: grid; gap: 4px; width: 118px; max-width: 100%; }
+    .latency-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; border-left: 3px solid var(--metric-color, var(--line)); border-radius: 3px; padding: 2px 5px; background: color-mix(in srgb, var(--metric-color, var(--line)) 7%, var(--surface)); font-size: 11px; font-variant-numeric: tabular-nums; }
+    .latency-line strong { color: var(--metric-color, var(--ink)); white-space: nowrap; }
+    .latency-line > span { color: var(--muted); font-size: 10px; flex-shrink: 0; }
+    .latency-line.good { --metric-color: var(--success); }
+    .latency-line.warn { --metric-color: var(--warn); }
+    .latency-line.bad { --metric-color: var(--danger); }
+    .log-speed { font-variant-numeric: tabular-nums; }
+    .log-usage { display: flex; flex-wrap: wrap; gap: 0 4px; font-variant-numeric: tabular-nums; }
+    .log-usage > span { white-space: nowrap; }
+    .truncate { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row-main:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+    .row-main .badge { max-width: 100%; white-space: normal; }
     .cell { min-width: 0; overflow-wrap: anywhere; }
     .cell-label { display: none; color: var(--muted); font-size: 11px; }
     .primary-text { font-weight: 650; }
@@ -158,6 +185,7 @@
     .model-row > .model-main { flex: 1 1 180px; }
     .model-test-result { flex-basis: 100%; min-width: 0; padding-top: 10px; border-top: 1px solid var(--inset-line); display: grid; gap: 7px; }
     .model-test-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .model-test-provider { max-width: min(260px, 100%); }
     .model-test-error { min-width: 0; color: var(--danger); font-size: 12px; }
     .model-test-error summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; }
     .model-test-error summary span:first-child { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -237,6 +265,7 @@
     .inline-state { color: var(--muted); font-size: 12px; min-height: 18px; margin-top: 8px; }
     dialog { max-width: min(420px, calc(100vw - 32px)); width: 100%; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,.22); background: var(--surface); color: var(--ink); padding: 24px; }
     dialog::backdrop { background: rgba(18, 29, 35, .52); }
+    #clearAffinityDialog { position: fixed; top: 50%; transform: translateY(-50%); margin: 0 auto; max-height: calc(100dvh - 32px); overflow-y: auto; z-index: 9; }
     dialog h2 { margin-bottom: 6px; }
     dialog p { color: var(--muted); font-size: 12px; }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
@@ -266,22 +295,34 @@
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme]) { color-scheme: dark; --bg: #1d1b18; --surface: #1d1b18; --surface-2: #262320; --ink: #f6f4f1; --muted: #c9c3bb; --line: #4a453f; --accent: #8b8680; --accent-hover: #9a948e; --accent-ink: #fff; --success: #6ee7b7; --warn: #f2c77c; --danger: #f1a399; --focus: #a6a099; --code-bg: #262320; --shadow: 0 1px 3px rgba(0,0,0,.3); }
     }
-    @media (max-width: 1000px) {
+    @media (max-width: 1360px) {
       .log-head { display: none; }
       .log-list { margin-top: 16px; }
-      .row-main { grid-template-columns: repeat(3, minmax(0, 1fr)) 20px; }
-      .row-main .cell:nth-child(4), .row-main .cell:nth-child(5), .row-main .cell:nth-child(6) { grid-row: 2; }
-      .row-main .cell:nth-child(4) { grid-column: 1; }
-      .row-main .cell:nth-child(5) { grid-column: 2; }
-      .row-main .cell:nth-child(6) { grid-column: 3; }
-      .row-main .chevron { grid-column: 4; grid-row: 1; }
+      .row-main { grid-template-columns: repeat(4, minmax(0, 1fr)) 20px; }
+      .row-main .cell:nth-child(n+5) { grid-row: 2; }
+      .row-main .cell:nth-child(5) { grid-column: 1; }
+      .row-main .cell:nth-child(6) { grid-column: 2; }
+      .row-main .cell:nth-child(7) { grid-column: 3; }
+      .row-main .cell:nth-child(8) { grid-column: 4; }
+      .row-main .chevron { grid-column: 5; grid-row: 1; }
       .cell-label { display: block; margin-bottom: 2px; }
     }
     @media (max-width: 740px) {
+      .statistics-segment { min-height: 44px; }
       .shell { padding-top: 16px; }
       .config-grid { grid-template-columns: 1fr; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .row-main { grid-template-columns: repeat(2, minmax(0, 1fr)) 18px; }
+      .row-main .cell:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .row-main .cell:nth-child(4) { grid-column: 2; grid-row: 1; }
+      .row-main .cell:nth-child(2) { grid-column: 1 / 3; grid-row: 2; }
+      .row-main .cell:nth-child(3) { grid-column: 1; grid-row: 3; }
+      .row-main .cell:nth-child(5) { grid-column: 2; grid-row: 3; }
+      .row-main .cell:nth-child(6) { grid-column: 1 / 3; grid-row: 4; }
+      .row-main .cell:nth-child(7) { grid-column: 1; grid-row: 5; }
+      .row-main .cell:nth-child(8) { grid-column: 2; grid-row: 5; }
+      .row-main .chevron { grid-column: 3; grid-row: 1; }
       .attempt { grid-template-columns: 24px minmax(80px, 1fr) minmax(80px, 1fr); }
       .attempt > :nth-child(4), .attempt > :nth-child(5) { grid-column: 2 / -1; }
     }
@@ -296,13 +337,9 @@
       .toolbar .button { flex: 1 1 100%; }
       .count { margin-left: 0; }
       .row-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 18px; gap: 10px; padding: 13px; }
-      .row-main .cell:nth-child(1) { grid-column: 1; grid-row: 1; }
-      .row-main .cell:nth-child(3) { grid-column: 2; grid-row: 1; }
-      .row-main .cell:nth-child(2) { grid-column: 1 / 3; grid-row: 2; }
-      .row-main .cell:nth-child(4) { grid-column: 1 / 3; grid-row: 3; }
-      .row-main .cell:nth-child(5) { grid-column: 1; grid-row: 4; }
-      .row-main .cell:nth-child(6) { grid-column: 2; grid-row: 4; }
-      .row-main .chevron { grid-column: 3; grid-row: 1; }
+      .statistics-custom { width: 100%; }
+      .statistics-custom label { width: 100%; }
+      .statistics-custom input { flex: 1; width: 0; }
       .detail-grid { grid-template-columns: 1fr; }
       .field-line { display: grid; }
       .pagination { justify-content: space-between; }
@@ -337,15 +374,34 @@
         <button class="button compact" id="refreshLogs" type="button">刷新日志</button>
         <span class="count" id="logCount">-- 条</span>
       </div>
-      <p class="summary-scope">当前筛选 · 全部保留日志，不限当前页</p>
-      <div class="summary" aria-label="当前筛选的日志统计">
-        <div class="summary-item"><div class="summary-label">请求数</div><div class="summary-value" id="statRequests">--</div><div class="summary-note">当前筛选</div></div>
-        <div class="summary-item"><div class="summary-label">输入 tokens</div><div class="summary-value" id="statPromptTokens">--</div><div class="summary-note">全部保留请求</div></div>
-        <div class="summary-item"><div class="summary-label">输出 tokens</div><div class="summary-value" id="statCompletionTokens">--</div><div class="summary-note">全部保留请求</div></div>
-        <div class="summary-item"><div class="summary-label">输入缓存率</div><div class="summary-value" id="statCacheRate">--</div><div class="summary-note" id="statCachedTokens">缓存 tokens --</div></div>
+      <form class="statistics-tools" id="statisticsForm">
+        <span class="statistics-scope" id="statisticsScope" tabindex="0" title="独立永久累计，按请求完成时间以分钟查询；不受日志搜索、渠道、状态或保留条数影响。旧日志仅在首次启用时导入当时仍保留的部分。">统计时段</span>
+        <input id="statisticsRange" type="hidden" value="all">
+        <div class="statistics-segments" id="statisticsSegments" role="group" aria-labelledby="statisticsScope">
+          <button class="statistics-segment" type="button" data-range="all" aria-pressed="true">全部</button>
+          <button class="statistics-segment" type="button" data-range="today" aria-pressed="false">今天</button>
+          <button class="statistics-segment" type="button" data-range="24h" aria-pressed="false">24 小时</button>
+          <button class="statistics-segment" type="button" data-range="7d" aria-pressed="false">近 7 天</button>
+          <button class="statistics-segment" type="button" data-range="30d" aria-pressed="false">近 30 天</button>
+          <button class="statistics-segment" type="button" data-range="custom" aria-pressed="false" aria-controls="statisticsCustom" aria-expanded="false">自定义</button>
+        </div>
+        <div class="statistics-custom" id="statisticsCustom" hidden>
+          <label for="statisticsStart">从 <input class="control" id="statisticsStart" type="datetime-local" step="60"></label>
+          <label for="statisticsEnd">至 <input class="control" id="statisticsEnd" type="datetime-local" step="60"></label>
+          <button class="button compact" type="submit">应用</button>
+        </div>
+        <button class="button compact" id="refreshStatistics" type="button">刷新统计</button>
+        <span class="statistics-alert" id="statisticsError" role="status" hidden></span>
+        <span class="badge warn" id="statisticsPersistenceError" tabindex="0" hidden>保存异常</span>
+      </form>
+      <div class="summary" id="statisticsCards" aria-label="所选时段的独立累计统计">
+        <div class="summary-item" id="statRequestsCard"><div class="summary-label">总请求数</div><div class="summary-value" id="statRequests">—</div></div>
+        <div class="summary-item" title="总 tokens = 输入 + 输出；缓存已包含在输入中，不重复相加。"><div class="summary-label">总 tokens</div><div class="summary-value" id="statTotalTokens">—</div><div class="summary-note">输入 <span id="statPromptTokens">—</span> · 输出 <span id="statCompletionTokens">—</span> · 缓存 <span id="statCachedTokens">—</span></div></div>
+        <div class="summary-item" title="输入 tokens 中命中缓存的比例；没有可用数据时显示 —。"><div class="summary-label">缓存命中率</div><div class="summary-value" id="statCacheRate">—</div></div>
+        <div class="summary-item" id="statTokenRateCard" tabindex="0" title="服务端按样本总输出 tokens ÷ 样本总有效时间计算，不是各行速率的简单平均。有效时间 = 总耗时 − 首字时间；首字未记录时使用总耗时。有效时间不足 0.5 秒的样本不计入平均速率，正好 0.5 秒计入；每行仍显示原始速率。"><div class="summary-label">平均 token 速率<span class="rate-history-hint" id="rateHistoryPartial" tabindex="0" aria-label="旧速率样本缺失：部分历史记录缺少速率明细，仅影响平均速率样本；累计请求数和 tokens 不变。" title="部分历史记录缺少速率明细，仅影响平均速率样本；累计请求数和 tokens 不变。" hidden>!</span></div><div class="summary-value" id="statTokenRate">—</div></div>
       </div>
       </div>
-      <div class="log-head" aria-hidden="true"><span>时间 / 请求</span><span>客户端模型 / 上游</span><span>结果</span><span>实际上游</span><span>延时</span><span>用量</span><span></span></div>
+      <div class="log-head" aria-hidden="true"><span>时间</span><span>客户端模型 / 上游</span><span>思考强度</span><span>结果</span><span>凭据</span><span>实际上游</span><span>首字 / 耗时</span><span>用量</span><span></span></div>
       <div class="log-list" id="logList" aria-live="polite"><div class="empty">正在读取日志…</div></div>
       <div class="pagination"><button class="button compact" id="prevPage" type="button">上一页</button><span id="pageInfo">第 1 页</span><button class="button compact" id="nextPage" type="button">下一页</button></div>
     </section>
@@ -387,6 +443,7 @@
         <div class="toolbar credential-tools">
           <input class="control search" id="credentialSearch" type="search" placeholder="搜索凭据名称或 ID" aria-label="搜索凭据">
           <button class="button compact" id="refreshUsage" type="button">刷新本页用量</button>
+          <button class="button reassign" id="openClearAffinity" type="button" aria-haspopup="dialog" aria-controls="clearAffinityDialog" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg><span>重新分配会话</span></button>
           <span class="count" id="credentialCount"></span>
         </div>
         <div id="credentialList"><div class="empty">正在读取凭据…</div></div>
@@ -401,7 +458,7 @@
           <p class="inline-state" id="modelState"></p>
         </div>
         <div class="panel">
-          <div class="panel-head"><div><h2>请求与日志设置</h2><p class="panel-hint">仅影响本插件</p></div></div>
+          <div class="panel-head"><div><h2>请求与日志设置</h2><p class="panel-hint">仅影响本插件</p></div><button class="button compact" id="openResetStatistics" type="button" aria-haspopup="dialog" aria-controls="resetStatisticsDialog">清空统计</button></div>
           <form class="form-stack" id="settingsForm">
             <div class="field"><label for="nonstreamMode">非流式处理</label><select class="control" id="nonstreamMode"><option value="native">原生非流式</option><option value="native-fallback">原生优先，必要时聚合流式</option><option value="stream-aggregate">直接聚合流式（推荐）</option></select></div>
             <div class="field"><label for="timeoutSeconds">请求总时长上限（秒）</label><input class="control" id="timeoutSeconds" type="number" min="10" max="1800" step="1" required><div class="panel-hint">包含思考与输出，新装默认 600 秒。旧设置若为 180 秒，长任务可调至 600 秒或更高。</div></div>
@@ -460,6 +517,27 @@
       <div class="dialog-actions"><button class="button" id="cancelCredential" type="button">取消</button><button class="button primary" id="saveCredential" type="submit">添加凭据</button></div>
     </form>
   </dialog>
+  <dialog id="clearAffinityDialog" aria-labelledby="clearAffinityTitle" aria-describedby="clearAffinityDialogHint">
+    <h2 id="clearAffinityTitle">重新分配会话</h2>
+    <p id="clearAffinityDialogHint">CPA 会记住每段对话用过的账号，所以调高 2 号的优先级后，旧对话仍可能一直用 1 号。这里可以清除这些旧绑定，让后续请求按当前优先级重新选账号。</p>
+    <form class="form-stack" id="clearAffinityForm">
+      <div class="notice">作用于本插件的所有会话，包括暂时没有发消息的对话。正在生成的回复会继续完成，从下一条请求开始重新选账号。</div>
+      <div class="field"><span class="subtext">当前优先顺序</span><div id="clearAffinityOrder" class="subtext" style="overflow-wrap: anywhere;"></div></div>
+      <p class="subtext">无需停用账号，也不用在操作期间发送消息。优先级相同时沿用 CPA 的调度策略；高优先级账号不可用时仍会选择其他账号。</p>
+      <p class="inline-state" id="clearAffinityProgress" role="status" aria-live="polite"></p>
+      <p class="inline-state error-text" id="clearAffinityError" role="alert"></p>
+      <div class="dialog-actions"><button class="button" id="cancelClearAffinity" type="button">取消</button><button class="button primary" id="confirmClearAffinity" type="submit">清除旧绑定，重新分配</button></div>
+    </form>
+  </dialog>
+  <dialog id="resetStatisticsDialog" aria-labelledby="resetStatisticsTitle" aria-describedby="resetStatisticsHint">
+    <h2 id="resetStatisticsTitle">清空全部统计？</h2>
+    <p id="resetStatisticsHint">将清空所有时段的累计请求数、tokens、速率和缓存统计，并从零开始累计。此操作不受当前统计时段限制。</p>
+    <p>请求日志、凭据和套餐额度保持不变。界面中不可恢复；服务端会保留重置前的备份。</p>
+    <form id="resetStatisticsForm">
+      <p class="inline-state error-text" id="resetStatisticsError" role="alert"></p>
+      <div class="dialog-actions"><button class="button" id="cancelResetStatistics" type="button" autofocus>取消</button><button class="button danger" id="confirmResetStatistics" type="submit">确认清空统计</button></div>
+    </form>
+  </dialog>
   <dialog id="estimateDialog" aria-labelledby="estimateDialogTitle" aria-describedby="estimateDialogAccount">
     <h2 id="estimateDialogTitle">采样依据与计价说明</h2>
     <p id="estimateDialogAccount"></p>
@@ -503,7 +581,30 @@
     const number = (value) => Number.isFinite(Number(value)) && present(value) ? Number(value).toLocaleString('zh-CN') : '--';
     const percent = (value) => value !== null && value !== undefined && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1 ? `${(Number(value) * 100).toLocaleString('zh-CN', { maximumFractionDigits: 1 })}%` : '--';
     const ms = (value) => Number.isFinite(Number(value)) && present(value) ? `${number(value)} ms` : '--';
-    const ttft = (log) => log.stream === true && Number.isFinite(Number(log.ttft_ms)) && Number(log.ttft_ms) > 0 ? ms(log.ttft_ms) : '—';
+    function formatLogDuration(value) {
+      if (!present(value) || !Number.isFinite(Number(value)) || Number(value) <= 0) return '—';
+      if (Number(value) < 60000) return `${(Number(value) / 1000).toFixed(1)}s`;
+      const seconds = Math.round(Number(value) / 1000);
+      return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    }
+    const ttft = (log) => log.upstream_skipped === true ? '—' : formatLogDuration(log.ttft_ms);
+    const tokenRate = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? `${Math.round(value).toLocaleString('zh-CN')} t/s` : '—';
+    // NewAPI timing colors use end-to-end throughput; the displayed t/s comes from the API.
+    function latencyTone(value, kind, completionTokens) {
+      if (!present(value) || !Number.isFinite(Number(value)) || Number(value) <= 0) return '';
+      const seconds = Number(value) / 1000;
+      if (kind === 'ttft') return seconds < 5 ? 'good' : seconds < 10 ? 'warn' : 'bad';
+      if (Number(completionTokens) >= 100) {
+        const throughput = Number(completionTokens) / seconds;
+        return throughput >= 30 ? 'good' : throughput >= 15 ? 'warn' : 'bad';
+      }
+      return seconds < 10 ? 'good' : seconds < 30 ? 'warn' : 'bad';
+    }
+    function latencyLine(label, value, kind, skipped, completionTokens) {
+      const known = !skipped && present(value) && Number.isFinite(Number(value)) && Number(value) > 0;
+      const hint = kind === 'ttft' ? '首字：<5 秒绿，<10 秒黄，其余红' : '耗时：输出不足 100 tokens 时，<10 秒绿、<30 秒黄、其余红；否则按输出 ÷ 总耗时，≥30 t/s 绿、≥15 t/s 黄、其余红';
+      return `<div class="latency-line ${known ? latencyTone(value, kind, completionTokens) : ''}" title="${esc(hint)}"><span>${label}</span><strong>${known ? formatLogDuration(value) : '—'}</strong></div>`;
+    }
     const apiReady = () => API_BASE && !API_BASE.includes('__PASSBRIDGE_');
     const apiUrl = (path, query) => {
       const base = new URL(API_BASE.replace(/\/?$/, '/'), location.origin);
@@ -689,36 +790,50 @@
     function datum(label, value, fallback = '未记录') { return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`; }
     function logMarkup(log) {
       const status = statusInfo(log.status);
-	  const teamLimited = log.error_kind === 'upstream_team_rate_limited';
-	  const limited = teamLimited || log.error_kind === 'upstream_rate_limited';
-	  const remaining = Math.max(0, Math.ceil((Date.parse(log.retry_at) - Date.now()) / 1000));
-	  const limitName = teamLimited ? '上游团队限流' : '请求限流';
-	  const limitLabel = limited ? (remaining > 0 ? `${limitName}，${remaining} 秒后可重试` : limitName) : '';
+      const local = log.upstream_skipped === true;
+      const count = Number.isInteger(log.request_count) && log.request_count > 0 ? log.request_count : 1;
+      const lastTime = log.last_time || log.time;
+      const teamLimited = log.error_kind === 'upstream_team_rate_limited';
+      const limited = teamLimited || log.error_kind === 'upstream_rate_limited';
+      const remaining = Math.max(0, Math.ceil((Date.parse(log.retry_at) - Date.now()) / 1000));
+      const limitName = teamLimited ? '上游团队限流' : '请求限流';
+      const limitLabel = limited ? (remaining > 0 ? `${limitName}，${remaining} 秒后可重试` : limitName) : '';
       const actual = shown(actualProvider(log.provider, log.upstream_skipped), '未知');
       const credential = present(log.credential) ? log.credential : present(log.credential_id) ? log.credential_id : '—';
-      const attempts = Array.isArray(log.attempts) ? log.attempts : [];
+      const attempts = !local && Array.isArray(log.attempts) ? log.attempts.filter((attempt) => attempt.upstream_skipped !== true) : [];
+      const upstreamAttempts = local ? 0 : Number.isInteger(log.upstream_attempt_count) && log.upstream_attempt_count >= 0 ? log.upstream_attempt_count : attempts.length;
+      const duration = local ? '—' : formatLogDuration(log.duration_ms);
+      const speed = local ? '—' : tokenRate(log.output_tokens_per_second);
       const attemptMarkup = attempts.length ? attempts.map((attempt, index) => {
         const attemptStatus = statusInfo(attempt.status);
-        return `<div class="attempt"><span class="mono">${index + 1}.</span><span class="badge ${attemptStatus.cls}">${attemptStatus.label}</span><strong>${shown(actualProvider(attempt.provider, attempt.upstream_skipped === true || log.upstream_skipped === true), '未知')}</strong><span>${ms(attempt.duration_ms)}</span><span class="error-text">${shown(attempt.error, '—')}</span></div>`;
-      }).join('') : '<div class="subtext">无尝试明细</div>';
+        return `<div class="attempt"><span class="mono">${index + 1}.</span><span class="badge ${attemptStatus.cls}">${attemptStatus.label}</span><strong>${shown(actualProvider(attempt.provider), '未知')}</strong><span>${formatLogDuration(attempt.duration_ms)}</span><span class="error-text">${shown(attempt.error, '—')}</span></div>`;
+      }).join('') : `<div class="subtext">${local ? '本地退避拦截，未发起上游请求' : '无尝试明细'}</div>`;
       return `<details class="log-entry" data-id="${esc(log.id)}"><summary class="row-main">
-        <div class="cell"><span class="cell-label">时间 / 请求</span><div class="primary-text mono">${formatTime(log.time)}</div><div class="subtext mono">${shown(log.id, '无 ID')}</div></div>
-        <div class="cell"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono">${shown(log.model)}</div><div class="subtext mono">${shown(log.upstream_model)}</div><div class="tagline"><span class="badge" title="实际凭据：${esc(credential)}">凭据 ${esc(credential)}</span></div></div>
-        <div class="cell"><span class="cell-label">结果</span><span class="badge ${status.cls}" title="${esc(limitLabel)}">${limited ? limitName : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${log.upstream_skipped ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div></div>
-        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text">${actual}</div></div>
-        <div class="cell"><span class="cell-label">延时 / 首字</span><div>${ms(log.duration_ms)}</div><div class="subtext">首字 ${ttft(log)}</div></div>
-        <div class="cell"><span class="cell-label">用量 / 尝试</span><div>${number(log.prompt_tokens)} / ${number(log.completion_tokens)}</div><div class="subtext">缓存 ${number(log.cached_tokens)} · ${attempts.length} 次</div></div>
+        <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${local ? '首 ' : ''}${formatTime(log.time)}</div>${local ? `<div class="subtext mono">末 ${formatTime(lastTime)}</div>` : ''}</div>
+        <div class="cell"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono">${shown(log.model)}</div><div class="subtext mono">${shown(log.upstream_model)}</div></div>
+        <div class="cell"><span class="cell-label">思考强度</span><span class="badge">${shown(log.reasoning_effort, '—')}</span></div>
+        <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div></div>
+        <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
+        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
+        <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.ttft_ms, 'ttft', local, log.completion_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', local, log.completion_tokens)}</div></div>
+        <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="输入 / 输出 tokens"><span>${number(log.prompt_tokens)}</span><span>/ ${number(log.completion_tokens)}</span></div><div class="subtext log-usage"><span>缓存 ${number(log.cached_tokens)}</span><span class="log-speed" title="输出 tokens ÷（总耗时 − 首字时间）；首字未记录时使用总耗时。直接展示服务端原始速率，不应用平均速率的 0.5 秒阈值。">· ${speed}</span></div></div>
         <span class="chevron" aria-hidden="true">›</span></summary>
         <div class="detail"><div class="detail-head"><strong>请求详情</strong></div>
           <div class="detail-grid">
+            ${datum('请求 ID', log.id, '—')}
+            ${datum('最近请求 ID', log.last_request_id || log.id, '—')}
+            ${datum('思考强度', log.reasoning_effort, '—')}
             ${datum('实际上游', actualProvider(log.provider, log.upstream_skipped), '未知')}
             ${datum('实际凭据', credential, '—')}
+            ${datum('上游请求', `${number(upstreamAttempts)} 次`)}
             ${datum('首字时间', ttft(log), '—')}
-            ${datum('总耗时', ms(log.duration_ms), '--')}
+            ${datum('总耗时', duration, '—')}
+            ${datum('输出速率', speed, '—')}
             ${datum('输入 tokens', number(log.prompt_tokens), '--')}
             ${datum('输出 tokens', number(log.completion_tokens), '--')}
             ${datum('缓存 tokens', number(log.cached_tokens), '--')}
-			${limited ? datum('重试状态', limitLabel) + datum('限流范围', log.rate_limit_scope === 'upstream_team' ? '上游团队' : '当前凭据 / 模型') : ''}
+            ${local ? datum('本地拦截', `${number(count)} 次`) + datum('首次拦截', formatTime(log.time)) + datum('最近拦截', formatTime(lastTime)) + datum('退避窗口 ID', log.backoff_window_id, '—') : ''}
+            ${limited ? datum('重试状态', limitLabel) + datum('限流范围', log.rate_limit_scope === 'upstream_team' ? '上游团队' : '当前凭据 / 模型') : ''}
           </div>
           ${present(log.error) ? `<div class="attempts"><div class="datum-label">请求错误</div><div class="error-text">${esc(log.error)}</div></div>` : ''}
           <div class="attempts"><strong>尝试明细 · ${attempts.length}</strong>${attemptMarkup}</div>
@@ -727,23 +842,127 @@
     function renderProviderOptions() {
       dropdowns.get('providerFilter').sync();
     }
+    const statistics = { controller: null, revision: 0, resetting: false };
+    const STATISTICS_STORAGE_KEY = 'clinepassbridge.statistics-range.v1';
+    const STATISTICS_SCOPE_HINT = $('statisticsScope').title;
+    const STATISTICS_RATE_HINT = $('statTokenRateCard').title;
+    function localMinute(date) {
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+    function syncStatisticsRange() {
+      const custom = $('statisticsRange').value === 'custom';
+      $('statisticsCustom').hidden = !custom;
+      $('statisticsStart').required = custom;
+      $('statisticsEnd').required = custom;
+      for (const button of $('statisticsSegments').querySelectorAll('[data-range]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.range === $('statisticsRange').value));
+        if (button.dataset.range === 'custom') button.setAttribute('aria-expanded', String(custom));
+      }
+    }
+    function restoreStatisticsRange() {
+      const end = new Date(Math.floor(Date.now() / 60000) * 60000 + 60000);
+      $('statisticsStart').value = localMinute(new Date(end.getTime() - 86400000));
+      $('statisticsEnd').value = localMinute(end);
+      try {
+        const saved = JSON.parse(localStorage.getItem(STATISTICS_STORAGE_KEY) || 'null');
+        if (saved && ['all', 'today', '24h', '7d', '30d', 'custom'].includes(saved.range)) {
+          $('statisticsRange').value = saved.range;
+          for (const [key, id] of [['start', 'statisticsStart'], ['end', 'statisticsEnd']]) {
+            if (typeof saved[key] === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(saved[key]) && Number.isFinite(Date.parse(saved[key]))) $(id).value = saved[key];
+          }
+        }
+      } catch { /* Storage may be disabled; keep this page's selection in memory. */ }
+      syncStatisticsRange();
+    }
+    function statisticsQuery() {
+      const range = $('statisticsRange').value;
+      if (range === 'all') return {};
+      let start, end;
+      if (range === 'custom') {
+        const inputs = [$('statisticsStart'), $('statisticsEnd')];
+        if (inputs.some((input) => !input.value || !input.checkValidity())) throw new Error('请填写完整的起止时间，精确到分钟');
+        [start, end] = inputs.map((input) => new Date(input.value));
+        if (![start, end].every((date) => Number.isFinite(date.getTime())) || start >= end) throw new Error('结束时间需晚于开始时间');
+      } else {
+        // Include the current minute; the server buckets by request completion time.
+        end = new Date(Math.floor(Date.now() / 60000) * 60000 + 60000);
+        if (range === 'today') { start = new Date(); start.setHours(0, 0, 0, 0); }
+        else start = new Date(end.getTime() - ({ '24h': 1, '7d': 7, '30d': 30 }[range] || 1) * 86400000);
+      }
+      start.setSeconds(0, 0);
+      end.setSeconds(0, 0);
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+    function rememberStatisticsRange() {
+      try {
+        localStorage.setItem(STATISTICS_STORAGE_KEY, JSON.stringify({ range: $('statisticsRange').value, start: $('statisticsStart').value, end: $('statisticsEnd').value }));
+      } catch { /* Statistics remain usable without persistent browser storage. */ }
+    }
+    function clearStatisticsCards() {
+      for (const id of ['statRequests', 'statTotalTokens', 'statPromptTokens', 'statCompletionTokens', 'statCachedTokens', 'statTokenRate', 'statCacheRate']) $(id).textContent = '—';
+      $('statRequestsCard').removeAttribute('title');
+      $('statisticsPersistenceError').hidden = true;
+      $('statisticsScope').title = STATISTICS_SCOPE_HINT;
+      $('rateHistoryPartial').hidden = true;
+      $('statTokenRateCard').title = STATISTICS_RATE_HINT;
+    }
+    function renderStatistics(data) {
+      for (const [id, field] of [['statRequests', 'requests'], ['statTotalTokens', 'total_tokens'], ['statPromptTokens', 'prompt_tokens'], ['statCompletionTokens', 'completion_tokens'], ['statCachedTokens', 'cached_tokens']]) $(id).textContent = number(data[field]);
+      $('statTokenRate').textContent = tokenRate(data.output_tokens_per_second);
+      $('rateHistoryPartial').hidden = data.rate_history_partial !== true;
+      $('statTokenRateCard').title = STATISTICS_RATE_HINT + (data.rate_history_partial === true ? ` ${$('rateHistoryPartial').title}` : '');
+      $('statCacheRate').textContent = present(data.cache_rate) ? percent(data.cache_rate) : '—';
+      $('statRequestsCard').title = `本地退避 ${number(data.local_backoff_requests)} 次 · 上游请求 ${number(data.upstream_requests)} 次${data.upstream_requests_unknown > 0 ? ` · 另有 ${number(data.upstream_requests_unknown)} 条旧记录未记录上游调用次数` : ''}`;
+      const time = (value) => { const date = new Date(value); return present(value) && Number.isFinite(date.getTime()) ? date.toLocaleString('zh-CN', { hour12: false }) : '—'; };
+      $('statisticsScope').title = `${STATISTICS_SCOPE_HINT}${data.since ? ` 累计起点：${time(data.since)}。` : ''}${data.start || data.end ? ` 查询时段：${time(data.start)} 至 ${time(data.end)}。` : ''}${data.imported_history ? ' 已导入首次启用时保留的部分旧日志，不代表完整历史。' : ''}`;
+      const persistenceError = present(data.persistence_error) ? String(data.persistence_error) : '';
+      $('statisticsPersistenceError').hidden = !persistenceError;
+      $('statisticsPersistenceError').title = persistenceError ? `统计持久化失败：${persistenceError}；最新累计可能仅保留在内存中。` : '';
+      $('statisticsPersistenceError').setAttribute('aria-label', $('statisticsPersistenceError').title);
+    }
+    async function loadStatistics() {
+      if (statistics.resetting) return false;
+      statistics.controller?.abort();
+      const controller = new AbortController();
+      statistics.controller = controller;
+      const revision = ++statistics.revision;
+      $('statisticsError').hidden = true;
+      $('refreshStatistics').disabled = true;
+      $('statisticsCards').setAttribute('aria-busy', 'true');
+      clearStatisticsCards();
+      try {
+        const query = statisticsQuery();
+        rememberStatisticsRange();
+        const data = await api('/statistics', { query, signal: controller.signal });
+        if (revision !== statistics.revision) return false;
+        if (!data || typeof data.requests !== 'number') throw new Error('统计响应缺少累计数据');
+        renderStatistics(data);
+        return true;
+      } catch (error) {
+        if (error.name !== 'AbortError' && revision === statistics.revision) {
+          $('statisticsError').textContent = `统计读取失败：${error.message}`;
+          $('statisticsError').hidden = false;
+        }
+        return false;
+      } finally {
+        if (revision === statistics.revision) {
+          $('refreshStatistics').disabled = false;
+          $('statisticsCards').setAttribute('aria-busy', 'false');
+        }
+      }
+    }
     async function loadLogs() {
       state.logsController?.abort();
-      state.logsController = new AbortController();
+      const controller = new AbortController();
+      state.logsController = controller;
       $('refreshLogs').disabled = true;
       $('logList').innerHTML = '<div class="empty">正在读取日志…</div>';
-      for (const id of ['statRequests', 'statPromptTokens', 'statCompletionTokens', 'statCacheRate']) $(id).textContent = '--';
-      $('statCachedTokens').textContent = '缓存 tokens --';
       try {
-        const data = await api('/logs', { query: { limit: PAGE_SIZE, offset: state.page * PAGE_SIZE, search: $('search').value.trim(), status: $('statusFilter').value, provider: $('providerFilter').value }, signal: state.logsController.signal });
+        const data = await api('/logs', { query: { limit: PAGE_SIZE, offset: state.page * PAGE_SIZE, search: $('search').value.trim(), status: $('statusFilter').value, provider: $('providerFilter').value }, signal: controller.signal });
+        if (controller !== state.logsController) return;
         const items = Array.isArray(data?.items) ? data.items : [];
-        const summary = data?.summary;
-        $('statRequests').textContent = number(summary?.requests);
-        $('statPromptTokens').textContent = number(summary?.prompt_tokens);
-        $('statCompletionTokens').textContent = number(summary?.completion_tokens);
-        $('statCacheRate').textContent = percent(summary?.cache_rate);
-        $('statCachedTokens').textContent = `缓存 tokens ${number(summary?.cached_tokens)}`;
         state.total = Number.isFinite(Number(data?.total)) ? Number(data.total) : items.length;
+        if (Number.isInteger(data?.offset) && data.offset >= 0) state.page = Math.floor(data.offset / PAGE_SIZE);
         for (const log of items) if (actualProvider(log.provider, log.upstream_skipped)) state.providers.add(actualProvider(log.provider, log.upstream_skipped));
         renderProviderOptions();
         $('logList').innerHTML = items.length ? items.map(logMarkup).join('') : '<div class="empty"><strong>没有匹配的请求</strong>调整筛选条件或稍后刷新</div>';
@@ -753,12 +972,10 @@
         $('nextPage').disabled = (state.page + 1) * PAGE_SIZE >= state.total;
         globalError('');
       } catch (error) {
-        if (error.name === 'AbortError') return;
-        for (const id of ['statRequests', 'statPromptTokens', 'statCompletionTokens', 'statCacheRate']) $(id).textContent = '--';
-        $('statCachedTokens').textContent = '缓存 tokens --';
+        if (error.name === 'AbortError' || controller !== state.logsController) return;
         $('logList').innerHTML = `<div class="empty"><strong>日志读取失败</strong>${esc(error.message)}</div>`;
         globalError(error.message);
-      } finally { $('refreshLogs').disabled = false; }
+      } finally { if (controller === state.logsController) $('refreshLogs').disabled = false; }
     }
     async function loadStatus() {
       const data = await api('/status');
@@ -800,7 +1017,8 @@
       const label = test.ok ? '可用' : test.status === 504 ? '超时' : '失败';
       const error = String(test.error || '');
       const summary = error.split(/\r?\n/).find((line) => line.trim()) || '测试失败';
-      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
+      const provider = test.upstream_skipped === true ? '未调用（本地退避）' : actualProvider(test.provider) || '未知';
+      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span class="model-test-provider truncate" title="实际上游：${esc(provider)}">实际上游 ${esc(provider)}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
     }
     function renderModelRows() {
       const credential = $('modelTestCredential').value;
@@ -983,6 +1201,54 @@
     }
     const CREDENTIAL_PAGE_SIZE = 12;
     const credentialView = { items: [], page: 0, visible: [], usage: new Map(), pending: new Map(), queue: new Map(), active: 0 };
+    const clearAffinity = { busy: false };
+    function syncClearAffinityControls() {
+      const enabled = credentialView.items.filter((item) => item.enabled !== false).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      $('openClearAffinity').disabled = clearAffinity.busy || !credentialView.items.length;
+      $('openClearAffinity').title = clearAffinity.busy ? '正在重新分配会话' : !credentialView.items.length ? '请先添加账号' : '清除旧会话绑定，按当前优先级重新选账号';
+      $('openClearAffinity').setAttribute('aria-busy', String(clearAffinity.busy));
+      $('clearAffinityOrder').innerHTML = enabled.length ? enabled.map((item) => `<div><strong>${esc(item.label || item.id)}</strong> · 优先级 ${esc(item.priority || 0)}</div>`).join('') : '当前没有启用的账号';
+      $('confirmClearAffinity').disabled = clearAffinity.busy || !credentialView.items.length;
+      $('confirmClearAffinity').textContent = clearAffinity.busy ? '正在重新分配…' : '清除旧绑定，重新分配';
+      $('cancelClearAffinity').disabled = clearAffinity.busy;
+      $('clearAffinityForm').setAttribute('aria-busy', String(clearAffinity.busy));
+    }
+    $('openClearAffinity').addEventListener('click', () => {
+      if (clearAffinity.busy || !credentialView.items.length) return;
+      $('clearAffinityForm').reset();
+      $('clearAffinityError').textContent = '';
+      $('clearAffinityProgress').textContent = '';
+      syncClearAffinityControls();
+      $('clearAffinityDialog').showModal();
+      $('confirmClearAffinity').focus();
+    });
+    $('cancelClearAffinity').addEventListener('click', () => { if (!clearAffinity.busy) $('clearAffinityDialog').close(); });
+    $('clearAffinityDialog').addEventListener('cancel', (event) => { if (clearAffinity.busy) event.preventDefault(); });
+    $('clearAffinityForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (clearAffinity.busy) return;
+      $('clearAffinityError').textContent = '';
+      if (!credentialView.items.length) { $('clearAffinityError').textContent = '请先添加账号'; return; }
+      clearAffinity.busy = true;
+      syncClearAffinityControls();
+      $('clearAffinityProgress').textContent = '正在清除旧绑定，等待 CPA 确认…';
+      try {
+        const result = await api('/credentials/clear-affinity', { method: 'POST', fullError: true, body: {} });
+        $('clearAffinityProgress').textContent = '旧绑定已清除，正在刷新账号状态…';
+        toast(result.message);
+        const refreshed = await Promise.allSettled([api('/credentials').then((data) => renderCredentials(data)), loadStatus()]);
+        const failed = refreshed.find((entry) => entry.status === 'rejected');
+        if (failed) globalError(`重新分配已完成，刷新失败：${esc(failed.reason.message)}`);
+        $('clearAffinityDialog').close();
+      } catch (error) {
+        const message = error.message.replace(/^HTTP \d+：/, '');
+        $('clearAffinityError').textContent = message;
+      } finally {
+        clearAffinity.busy = false;
+        $('clearAffinityProgress').textContent = '';
+        syncClearAffinityControls();
+      }
+    });
     const usageLabels = { five_hour: '5 小时', weekly: '每周', monthly: '每月' };
     function usageDate(value) {
       const date = new Date(value);
@@ -1096,6 +1362,7 @@
         for (const id of credentialView.pending.keys()) if (!ids.has(id)) credentialView.pending.delete(id);
         refreshEstimateDialog();
         syncModelTestCredentials();
+        syncClearAffinityControls();
       }
       if (focusID) {
         $('credentialSearch').value = '';
@@ -1187,12 +1454,57 @@
       }
       if (name !== 'config') credentialView.queue.clear();
       if (name !== 'logs') loadConfig();
+      else loadStatistics();
     }
     $('openPinEvidence').addEventListener('click', () => $('pinEvidenceDialog').showModal());
     $('logsTab').addEventListener('click', () => setTab('logs'));
     $('pinTab').addEventListener('click', () => setTab('pin'));
     $('configTab').addEventListener('click', () => setTab('config'));
-    $('refreshLogs').addEventListener('click', () => { loadStatus().catch((error) => globalError(error.message)); loadLogs(); });
+    $('refreshLogs').addEventListener('click', () => { loadStatus().catch((error) => globalError(error.message)); loadLogs(); loadStatistics(); });
+    $('statisticsRange').addEventListener('change', () => { syncStatisticsRange(); loadStatistics(); });
+    $('statisticsSegments').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-range]');
+      if (!button || button.dataset.range === $('statisticsRange').value) return;
+      $('statisticsRange').value = button.dataset.range;
+      $('statisticsRange').dispatchEvent(new Event('change'));
+    });
+    $('statisticsForm').addEventListener('submit', (event) => { event.preventDefault(); loadStatistics(); });
+    $('refreshStatistics').addEventListener('click', loadStatistics);
+    $('openResetStatistics').addEventListener('click', () => {
+      if (statistics.resetting) return;
+      $('resetStatisticsError').textContent = '';
+      $('resetStatisticsDialog').showModal();
+      $('cancelResetStatistics').focus();
+    });
+    $('cancelResetStatistics').addEventListener('click', () => { if (!statistics.resetting) $('resetStatisticsDialog').close(); });
+    $('resetStatisticsDialog').addEventListener('cancel', (event) => { if (statistics.resetting) event.preventDefault(); });
+    $('resetStatisticsForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (statistics.resetting) return;
+      statistics.resetting = true;
+      statistics.controller?.abort();
+      statistics.revision++;
+      $('statisticsCards').setAttribute('aria-busy', 'false');
+      $('resetStatisticsError').textContent = '';
+      for (const id of ['openResetStatistics', 'cancelResetStatistics', 'confirmResetStatistics', 'refreshStatistics']) $(id).disabled = true;
+      $('confirmResetStatistics').textContent = '正在清空…';
+      $('resetStatisticsForm').setAttribute('aria-busy', 'true');
+      let reset = false;
+      try {
+        await api('/statistics/reset', { method: 'POST', body: { confirm: true } });
+        reset = true;
+        clearStatisticsCards();
+        $('resetStatisticsDialog').close();
+        toast('统计已清空，已开始重新累计');
+      } catch (error) { $('resetStatisticsError').textContent = `清空失败：${error.message}`; }
+      finally {
+        statistics.resetting = false;
+        for (const id of ['openResetStatistics', 'cancelResetStatistics', 'confirmResetStatistics', 'refreshStatistics']) $(id).disabled = false;
+        $('confirmResetStatistics').textContent = '确认清空统计';
+        $('resetStatisticsForm').setAttribute('aria-busy', 'false');
+      }
+      if (reset && !await loadStatistics()) toast('统计已清空；刷新失败，请在请求日志页重新刷新统计');
+    });
     $('prevPage').addEventListener('click', () => { if (state.page > 0) { state.page--; loadLogs(); } });
     $('nextPage').addEventListener('click', () => { if ((state.page + 1) * PAGE_SIZE < state.total) { state.page++; loadLogs(); } });
     let searchTimer;
@@ -1210,6 +1522,7 @@
       $('authButton').textContent = state.key ? '密钥已输入' : '管理密钥';
       $('authDialog').close();
       loadStatus().catch((error) => globalError(error.message));
+      loadStatistics();
       if ($('logsPanel').hidden) loadConfig(); else loadLogs();
     });
     $('refreshModels').addEventListener('click', async () => {
@@ -1459,8 +1772,9 @@
       try { await api('/credentials', { method: 'DELETE', query: { id } }); renderCredentials(await api('/credentials')); await loadStatus(); toast('凭据已删除'); }
       catch (error) { toast(`删除失败：${error.message}`); button.disabled = false; }
     });
+    restoreStatisticsRange();
     if (!apiReady()) globalError('管理 API 路径尚未注入；请由宿主设置 __PASSBRIDGE_API_BASE__。');
-    else { loadStatus().then(() => loadLogs()).catch((error) => globalError(error.message)); }
+    else { loadStatus().then(() => loadLogs()).catch((error) => globalError(error.message)); loadStatistics(); }
   </script>
 </body>
 </html>

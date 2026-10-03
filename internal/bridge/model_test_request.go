@@ -100,6 +100,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 	}
 	if err == nil {
 		var stream upstreamStream
+		*entry.UpstreamAttempts++
 		stream, err = s.request(req, credential, j, true, diagnostics)
 		if err == nil {
 			var completion *completion
@@ -138,6 +139,6 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		"ok": err == nil, "status": statusOf(err), "error": detail, "duration_ms": duration,
 		"ttft_ms": entry.TTFTMS, "model": in.Model, "upstream_id": upstream,
 		"credential_id": credential.ID, "credential_label": credential.Label,
-		"provider": entry.Provider, "tested_at": time.Now().UTC(),
+		"provider": entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
 	})
 }

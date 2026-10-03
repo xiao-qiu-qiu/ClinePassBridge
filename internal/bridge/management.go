@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,10 +21,10 @@ const apiBase = "/v0/management/clinepassbridge"
 func (s *Service) registerManagement(raw json.RawMessage) (any, error) {
 	s.startUsageSampler()
 	routes := []map[string]string{}
-	for _, p := range []string{"status", "logs", "models", "config", "credentials", "credentials/usage"} {
+	for _, p := range []string{"status", "logs", "statistics", "models", "config", "credentials", "credentials/usage"} {
 		routes = append(routes, map[string]string{"Method": "GET", "Path": apiBase + "/" + p})
 	}
-	for _, p := range []string{"models/refresh", "models/test", "models/providers", "credentials"} {
+	for _, p := range []string{"models/refresh", "models/test", "models/providers", "credentials", "credentials/clear-affinity", "statistics/reset"} {
 		routes = append(routes, map[string]string{"Method": "POST", "Path": apiBase + "/" + p})
 	}
 	for _, p := range []string{"models", "config", "credentials"} {
@@ -70,6 +71,10 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(200, map[string]any{"version": Version, "log_persistence_error": logError, "credential_count": len(s.credentials()), "model_count": len(s.config().Models)})
 	case "GET /logs":
 		return s.logsResponse(r)
+	case "GET /statistics":
+		return s.statisticsResponse(r)
+	case "POST /statistics/reset":
+		return s.resetStatistics(r)
 	case "GET /config":
 		return managementJSON(200, s.config())
 	case "PUT /config":
@@ -113,6 +118,8 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return s.testModel(r)
 	case "POST /models/providers":
 		return s.discoverProviders(r)
+	case "POST /credentials/clear-affinity":
+		return s.clearAffinity(r)
 	case "GET /credentials":
 		return managementJSON(200, map[string]any{"items": s.credentials()})
 	case "GET /credentials/usage":
@@ -160,7 +167,11 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 	filtered := []LogEntry{}
 	for i := len(s.logs) - 1; i >= 0; i-- {
 		v := s.logs[i]
-		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error), search) {
+		label := ""
+		if v.UpstreamSkipped {
+			label = localBackoffLabel
+		}
+		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.LastRequestID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error+" "+v.Credential+" "+v.ReasoningEffort+" "+v.ErrorKind+" "+label), search) {
 			continue
 		}
 		if provider != "" && provider != "all" && !matchesProvider(provider, v) {
@@ -174,11 +185,14 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 				continue
 			}
 		}
+		v.OutputTokensPerSecond = outputTokenRate(v)
 		filtered = append(filtered, v)
 	}
+	sort.SliceStable(filtered, func(i, j int) bool { return logLastTime(filtered[i]).After(logLastTime(filtered[j])) })
 	total := len(filtered)
-	var prompt, completion, cached int64
+	var requests, prompt, completion, cached int64
 	for _, entry := range filtered {
+		requests += logRequestCount(entry)
 		prompt += entry.PromptTokens
 		completion += entry.CompletionTokens
 		cached += entry.CachedTokens
@@ -187,16 +201,20 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 	if prompt > 0 {
 		cacheRate = float64(cached) / float64(prompt)
 	}
-	summary := map[string]any{"requests": total, "prompt_tokens": prompt, "completion_tokens": completion, "cached_tokens": cached, "cache_rate": cacheRate}
-	if offset > total {
-		offset = total
+	summary := map[string]any{"requests": requests, "prompt_tokens": prompt, "completion_tokens": completion, "cached_tokens": cached, "cache_rate": cacheRate}
+	if offset >= total {
+		offset = 0
+		if total > 0 {
+			offset = ((total - 1) / limit) * limit
+		}
 	}
 	end := offset + limit
 	if end > total {
 		end = total
 	}
-	return managementJSON(200, map[string]any{"items": filtered[offset:end], "total": total, "summary": summary})
+	return managementJSON(200, map[string]any{"items": filtered[offset:end], "total": total, "summary": summary, "offset": offset})
 }
+
 // matchesProvider lets the UI filter by the label it shows for a locally
 // suppressed request, which has no upstream provider of its own.
 func matchesProvider(filter string, entry LogEntry) bool {
@@ -288,12 +306,9 @@ func (s *Service) updateCredential(r ManagementRequest) (any, error) {
 		return managementJSON(400, map[string]any{"error": "invalid credential filename"})
 	}
 	c.RequestScopedErrors = requestErrorRules()
-	if e := s.call("host.auth.save", map[string]any{"name": filename, "json": json.RawMessage(jsonBytes(c))}, nil); e != nil {
+	if e := s.saveCredential(c); e != nil {
 		return managementJSON(500, map[string]any{"error": "credential persistence failed"})
 	}
-	s.mu.Lock()
-	s.creds[id] = c
-	s.mu.Unlock()
 	return managementJSON(200, map[string]any{"id": c.ID, "label": c.Label, "enabled": !c.Disabled, "priority": c.Priority})
 }
 func (s *Service) deleteCredential(credentialID string) (any, error) {

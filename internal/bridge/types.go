@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const Version = "0.2.5"
+const Version = "0.2.9"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
@@ -89,17 +89,18 @@ type ManagementResponse struct {
 	Body       []byte
 }
 type Credential struct {
-	Type                string             `json:"type"`
-	ID                  string             `json:"id"`
-	Label               string             `json:"label"`
-	APIKey              string             `json:"api_key"`
-	Disabled            bool               `json:"disabled"`
-	ProxyURL            string             `json:"proxy_url,omitempty"`
+	Type     string `json:"type"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	APIKey   string `json:"api_key"`
+	Disabled bool   `json:"disabled"`
+	ProxyURL string `json:"proxy_url,omitempty"`
 	// Priority is forwarded to CPA, which schedules higher values first.
 	// Absent (nil) means "no preference"; the plugin does not invent one.
-	Priority *int `json:"priority,omitempty"`
+	Priority            *int               `json:"priority,omitempty"`
 	RequestScopedErrors []RequestErrorRule `json:"request_scoped_errors"`
 	ModelRevision       string             `json:"model_revision,omitempty"`
+	RoutingID           string             `json:"routing_id,omitempty"`
 }
 type RequestErrorRule struct {
 	Status int      `json:"status"`
@@ -227,37 +228,45 @@ type Attempt struct {
 	Error               string `json:"error,omitempty"`
 }
 type LogEntry struct {
-	ErrorKind           string     `json:"error_kind,omitempty"`
-	UpstreamHTTPStatus  int        `json:"upstream_http_status,omitempty"`
-	UpstreamErrorStatus int        `json:"upstream_error_status,omitempty"`
-	UpstreamSkipped     bool       `json:"upstream_skipped,omitempty"`
-	RetryAt             *time.Time `json:"retry_at,omitempty"`
-	RateLimitScope      string     `json:"rate_limit_scope,omitempty"`
-	promptReported      bool
-	completionReported  bool
-	estimateKey         string
-	CredentialID        string    `json:"credential_id,omitempty"`
-	UsageReported       bool      `json:"usage_reported,omitempty"`
-	CacheWriteTokens    int64     `json:"cache_write_tokens,omitempty"`
-	CacheWriteReported  bool      `json:"cache_write_reported,omitempty"`
-	ID                  string    `json:"id"`
-	Time                time.Time `json:"time"`
-	Model               string    `json:"model"`
-	UpstreamModel       string    `json:"upstream_model"`
-	Stream              bool      `json:"stream"`
-	StreamEnd           string    `json:"stream_end,omitempty"`
-	Status              int       `json:"status"`
-	Provider            string    `json:"provider"`
-	ProviderSource      string    `json:"provider_source"`
-	DurationMS          int64     `json:"duration_ms"`
-	TTFTMS              int64     `json:"ttft_ms"`
-	PromptTokens        int64     `json:"prompt_tokens"`
-	CompletionTokens    int64     `json:"completion_tokens"`
-	CachedTokens        int64     `json:"cached_tokens"`
-	ReasoningTokens     int64     `json:"reasoning_tokens"`
-	Credential          string    `json:"credential"`
-	Attempts            []Attempt `json:"attempts"`
-	Error               string    `json:"error,omitempty"`
+	CompletedAt           *time.Time `json:"completed_at,omitempty"`
+	UpstreamAttempts      *int       `json:"upstream_attempt_count,omitempty"`
+	ReasoningEffort       string     `json:"reasoning_effort,omitempty"`
+	RequestCount          int64      `json:"request_count,omitempty"`
+	LastTime              *time.Time `json:"last_time,omitempty"`
+	LastRequestID         string     `json:"last_request_id,omitempty"`
+	BackoffWindowID       string     `json:"backoff_window_id,omitempty"`
+	OutputTokensPerSecond *float64   `json:"output_tokens_per_second"`
+	ErrorKind             string     `json:"error_kind,omitempty"`
+	UpstreamHTTPStatus    int        `json:"upstream_http_status,omitempty"`
+	UpstreamErrorStatus   int        `json:"upstream_error_status,omitempty"`
+	UpstreamSkipped       bool       `json:"upstream_skipped,omitempty"`
+	RetryAt               *time.Time `json:"retry_at,omitempty"`
+	RateLimitScope        string     `json:"rate_limit_scope,omitempty"`
+	promptReported        bool
+	completionReported    bool
+	estimateKey           string
+	CredentialID          string    `json:"credential_id,omitempty"`
+	UsageReported         bool      `json:"usage_reported,omitempty"`
+	CacheWriteTokens      int64     `json:"cache_write_tokens,omitempty"`
+	CacheWriteReported    bool      `json:"cache_write_reported,omitempty"`
+	ID                    string    `json:"id"`
+	Time                  time.Time `json:"time"`
+	Model                 string    `json:"model"`
+	UpstreamModel         string    `json:"upstream_model"`
+	Stream                bool      `json:"stream"`
+	StreamEnd             string    `json:"stream_end,omitempty"`
+	Status                int       `json:"status"`
+	Provider              string    `json:"provider"`
+	ProviderSource        string    `json:"provider_source"`
+	DurationMS            int64     `json:"duration_ms"`
+	TTFTMS                int64     `json:"ttft_ms"`
+	PromptTokens          int64     `json:"prompt_tokens"`
+	CompletionTokens      int64     `json:"completion_tokens"`
+	CachedTokens          int64     `json:"cached_tokens"`
+	ReasoningTokens       int64     `json:"reasoning_tokens"`
+	Credential            string    `json:"credential"`
+	Attempts              []Attempt `json:"attempts"`
+	Error                 string    `json:"error,omitempty"`
 }
 
 func jsonBytes(v any) []byte      { b, _ := json.Marshal(v); return b }

@@ -30,6 +30,7 @@ type upstreamError struct {
 	RetryAt        time.Time
 	Scope          string
 	Local          bool
+	WindowID       string
 	Provider       string
 	ProviderSource string
 }
@@ -145,6 +146,7 @@ func logErrorDetails(entry *LogEntry, attempt *Attempt, err error) {
 	entry.ErrorKind, entry.RateLimitScope = "", ""
 	entry.UpstreamHTTPStatus, entry.UpstreamErrorStatus = 0, 0
 	entry.UpstreamSkipped, entry.RetryAt = false, nil
+	entry.BackoffWindowID = ""
 	var detail *upstreamError
 	if !errors.As(err, &detail) {
 		if err != nil {
@@ -170,6 +172,7 @@ func logErrorDetails(entry *LogEntry, attempt *Attempt, err error) {
 	entry.UpstreamErrorStatus = detail.UpstreamStatus
 	entry.RateLimitScope = detail.Scope
 	entry.UpstreamSkipped = detail.Local
+	entry.BackoffWindowID = detail.WindowID
 	if !detail.RetryAt.IsZero() {
 		entry.RetryAt = &detail.RetryAt
 	}
