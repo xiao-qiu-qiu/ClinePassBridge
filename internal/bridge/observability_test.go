@@ -321,6 +321,32 @@ func TestObservabilityStatisticsOutliveLogRetention(t *testing.T) {
 	observabilityCounts(t, observabilityStatistics(t, restarted, nil), 75, 0, 90, 0, 750, 150, 300)
 }
 
+func TestObservabilityDateStatisticsBeyondThousandLogs(t *testing.T) {
+	s := observabilityService(t, "")
+	s.mu.Lock()
+	s.cfg.LogRetention = 1000
+	s.mu.Unlock()
+	start := time.Now().UTC().Truncate(24 * time.Hour)
+	for i := 0; i < 1205; i++ {
+		s.appendLog(LogEntry{ID: fmt.Sprintf("over-thousand-%d", i), Status: 200,
+			PromptTokens: 10, CompletionTokens: 2, CachedTokens: 4, UpstreamAttempts: observabilityAttempts(1)})
+	}
+	logs := observabilityLogs(t, s, nil)
+	if logs.Total != 1000 || logs.Summary.Requests != 1000 {
+		t.Fatalf("retained log rows = %d, want 1000", logs.Total)
+	}
+	query := url.Values{"start": {start.Format(time.RFC3339)}, "end": {time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour).Format(time.RFC3339)}}
+	observabilityCounts(t, observabilityStatistics(t, s, query), 1205, 0, 1205, 0, 12050, 2410, 4820)
+	observabilityShutdown(t, s)
+	// Reopening with the helper's smaller 50-row retention must not shrink the
+	// date-filtered totals persisted in the independent statistics ledger.
+	restarted := observabilityService(t, s.config().DataDir)
+	if got := observabilityLogs(t, restarted, nil).Total; got != 50 {
+		t.Fatalf("reduced retained log rows = %d, want 50", got)
+	}
+	observabilityCounts(t, observabilityStatistics(t, restarted, query), 1205, 0, 1205, 0, 12050, 2410, 4820)
+}
+
 func TestObservabilityMinuteStatisticsRanges(t *testing.T) {
 	dir := t.TempDir()
 	day := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)

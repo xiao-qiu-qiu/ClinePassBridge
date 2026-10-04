@@ -468,7 +468,7 @@
           <p class="inline-state" id="settingsState"></p>
         </div>
         <div class="panel auth-panel">
-          <div class="panel-head"><div><h2>CPA 管理鉴权（兜底）</h2><p class="panel-hint">用于读取日志和修改插件配置。正常会复用 CPA 登录，无需操作；仅在登录未被识别或鉴权失败时手动输入 CPA 管理密钥。</p></div></div>
+          <div class="panel-head"><div><h2>管理鉴权（兜底）</h2><p class="panel-hint">用于读取日志和修改插件配置。优先复用同源 CPA / CPAMP 保存的登录；鉴权失败时可输入当前管理入口的密钥。</p></div></div>
           <div class="field-line"><span class="version" id="version">版本 --</span><button class="button compact" id="authButton" type="button">管理密钥</button></div>
         </div>
       </div>
@@ -476,11 +476,12 @@
   </main>
 
   <dialog id="authDialog" aria-labelledby="authTitle">
-    <h2 id="authTitle">CPA 管理鉴权（兜底）</h2>
-    <p>优先复用 CPA 管理页“记住密码”的登录。手动输入的密钥验证成功后保留在本标签页会话，刷新或切回插件无需重填；关闭标签页后结束。</p>
+    <h2 id="authTitle">管理鉴权（兜底）</h2>
+    <p>优先复用同源管理页保存的登录。手动密钥验证成功后保留在本标签页；勾选下方选项可在下次打开时继续使用。</p>
     <form id="authForm" class="form-stack" method="dialog" autocomplete="off">
       <div class="field"><label for="authType">请求头</label><select class="control" id="authType"><option value="bearer">Authorization: Bearer</option><option value="x-management-key">X-Management-Key</option></select></div>
-      <div class="field"><label for="authKey">CPA 管理密钥</label><input class="control" id="authKey" type="password" autocomplete="new-password" placeholder="粘贴CPA管理密钥"></div>
+      <div class="field"><label for="authKey">管理密钥</label><input class="control" id="authKey" type="password" autocomplete="new-password" placeholder="当前入口的 CPA 或 CPAMP 管理密钥"></div>
+      <label class="field-line"><input id="rememberAuth" type="checkbox">在此浏览器记住管理密钥</label>
       <div class="dialog-actions"><button class="button danger" id="clearAuth" type="button">清除密钥</button><button class="button" id="closeAuth" type="button">取消</button><button class="button primary" type="submit">应用</button></div>
     </form>
   </dialog>
@@ -740,6 +741,7 @@
       const headers = { Accept: 'application/json' };
       const manualKey = state.key;
       const manualAuthType = state.authType;
+      const rememberAuth = state.rememberAuth === true;
       if (options.body !== undefined) headers['Content-Type'] = 'application/json';
       if (manualKey) headers[manualAuthType === 'x-management-key' ? 'X-Management-Key' : 'Authorization'] = manualAuthType === 'x-management-key' ? manualKey : `Bearer ${manualKey}`;
       if (!manualKey && typeof window.PassBridgeAuthHeaders === 'function') {
@@ -766,7 +768,7 @@
         try { const body = JSON.parse(raw); detail = body.error || body.message || raw; } catch { detail = raw; }
         throw new Error(`HTTP ${response.status}${detail ? `：${options.fullError ? String(detail) : String(detail).slice(0, 240)}` : ''}`);
       }
-      if (manualKey && state.key === manualKey && state.authType === manualAuthType) window.PassBridgeSaveAuth?.(manualKey, manualAuthType);
+      if (manualKey && state.key === manualKey && state.authType === manualAuthType && (state.rememberAuth === true) === rememberAuth) window.PassBridgeSaveAuth?.(manualKey, manualAuthType, rememberAuth);
       if (response.status === 204) return null;
       const text = await response.text();
       return text ? JSON.parse(text) : null;
@@ -781,6 +783,11 @@
       if (value === 'success' || value === 'ok' || /^2\d\d$/.test(value)) return { label: present(raw) && /^2\d\d$/.test(value) ? `HTTP ${esc(raw)}` : '成功', cls: 'good' };
       if (value === 'error' || value === 'failed' || value === 'failure' || /^[45]\d\d$/.test(value)) return { label: present(raw) && /^[45]\d\d$/.test(value) ? `HTTP ${esc(raw)}` : '失败', cls: 'bad' };
       return { label: shown(raw, '未知状态'), cls: 'warn' };
+    }
+    function requestCacheRate(log) {
+      const input = log.prompt_tokens, cached = log.cached_tokens;
+      if (log.upstream_skipped === true || !Number.isFinite(input) || input <= 0 || !Number.isFinite(cached) || cached < 0 || cached > input) return '—';
+      return percent(cached / input);
     }
     function actualProvider(value, upstreamSkipped = false) {
       if (upstreamSkipped === true) return '本地退避';
@@ -816,7 +823,7 @@
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
         <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
         <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.ttft_ms, 'ttft', local, log.completion_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', local, log.completion_tokens)}</div></div>
-        <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="输入 / 输出 tokens"><span>${number(log.prompt_tokens)}</span><span>/ ${number(log.completion_tokens)}</span></div><div class="subtext log-usage"><span>缓存 ${number(log.cached_tokens)}</span><span class="log-speed" title="输出 tokens ÷（总耗时 − 首字时间）；首字未记录时使用总耗时。直接展示服务端原始速率，不应用平均速率的 0.5 秒阈值。">· ${speed}</span></div></div>
+        <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="输入 / 输出 tokens"><span>${number(log.prompt_tokens)}</span><span>/ ${number(log.completion_tokens)}</span></div><div class="subtext log-usage"><span>缓存 ${number(log.cached_tokens)}</span><span class="log-cache-rate" title="本条请求缓存命中率 = 缓存 tokens ÷ 输入 tokens；没有有效输入用量或未调用上游时显示 —。">(${requestCacheRate(log)})</span><span class="log-speed" title="输出 tokens ÷（总耗时 − 首字时间）；首字未记录时使用总耗时。直接展示服务端原始速率，不应用平均速率的 0.5 秒阈值。">· ${speed}</span></div></div>
         <span class="chevron" aria-hidden="true">›</span></summary>
         <div class="detail"><div class="detail-head"><strong>请求详情</strong></div>
           <div class="detail-grid">
@@ -1513,11 +1520,12 @@
     $('providerFilter').addEventListener('change', () => { state.page = 0; loadLogs(); });
     $('authButton').addEventListener('click', () => $('authDialog').showModal());
     $('closeAuth').addEventListener('click', () => $('authDialog').close());
-    $('clearAuth').addEventListener('click', () => { state.key = ''; window.PassBridgeClearAuth?.(); $('authKey').value = ''; $('authDialog').close(); $('authButton').textContent = '管理密钥'; toast('本标签页手动保存的管理密钥已清除'); });
+    $('clearAuth').addEventListener('click', () => { state.key = ''; state.rememberAuth = false; window.PassBridgeClearAuth?.(); $('authKey').value = ''; $('rememberAuth').checked = false; $('authDialog').close(); $('authButton').textContent = '管理密钥'; toast('插件手动保存的管理密钥已清除'); });
     $('authForm').addEventListener('submit', (event) => {
       event.preventDefault();
       state.key = $('authKey').value.trim();
       state.authType = $('authType').value;
+      state.rememberAuth = $('rememberAuth').checked;
       $('authKey').value = '';
       $('authButton').textContent = state.key ? '密钥已输入' : '管理密钥';
       $('authDialog').close();
@@ -1772,6 +1780,7 @@
       try { await api('/credentials', { method: 'DELETE', query: { id } }); renderCredentials(await api('/credentials')); await loadStatus(); toast('凭据已删除'); }
       catch (error) { toast(`删除失败：${error.message}`); button.disabled = false; }
     });
+    $('rememberAuth').checked = window.PassBridgeRememberAuth?.() || false;
     restoreStatisticsRange();
     if (!apiReady()) globalError('管理 API 路径尚未注入；请由宿主设置 __PASSBRIDGE_API_BASE__。');
     else { loadStatus().then(() => loadLogs()).catch((error) => globalError(error.message)); loadStatistics(); }

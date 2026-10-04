@@ -1,6 +1,6 @@
 /* Compatibility with the official management center's cli-proxy-auth storage format.
  * Reuses the saved login for this exact CPA endpoint. Manually entered keys are
- * retained only in this tab's sessionStorage, after a successful API request.
+ * retained after a successful API request, in this tab unless explicitly remembered.
  */
 (() => {
   'use strict';
@@ -17,10 +17,10 @@
     if (!login || typeof login.key !== 'string' || !login.key.trim()) return {};
     return login.type === 'x-management-key' ? { 'X-Management-Key': login.key.trim() } : { Authorization: `Bearer ${login.key.trim()}` };
   }
-  function readSessionLogin() {
+  function readManualLogin(persistent = false) {
     try {
       const name = sessionKey();
-      return name ? JSON.parse(sessionStorage.getItem(name)) : null;
+      return name ? JSON.parse((persistent ? localStorage : sessionStorage).getItem(name)) : null;
     } catch { return null; }
   }
   function readSavedLogin() {
@@ -28,9 +28,12 @@
       if (localStorage.getItem('isLoggedIn') !== 'true') return null;
       let value = localStorage.getItem('cli-proxy-auth');
       if (!value) return null;
-      if (value.startsWith('enc::v1::')) {
+      const v2 = value.startsWith('enc::v2::');
+      if (v2 || value.startsWith('enc::v1::')) {
         const bytes = Uint8Array.from(atob(value.slice(9)), c => c.charCodeAt(0));
-        const mask = new TextEncoder().encode(`cli-proxy-api-webui::secure-storage|${location.host}|${navigator.userAgent}`);
+        const mask = new TextEncoder().encode(v2
+          ? `cli-proxy-api-webui::secure-storage|v2|${location.host}`
+          : `cli-proxy-api-webui::secure-storage|${location.host}|${navigator.userAgent}`);
         value = new TextDecoder().decode(bytes.map((byte, i) => byte ^ mask[i % mask.length]));
       }
       const saved = JSON.parse(value)?.state;
@@ -43,21 +46,33 @@
     } catch { return null; }
   }
   window.PassBridgeAuthHeaders = () => {
-    const sessionHeaders = authHeaders(readSessionLogin());
-    return Object.keys(sessionHeaders).length ? sessionHeaders : authHeaders(readSavedLogin());
+    for (const login of [readManualLogin(), readManualLogin(true), readSavedLogin()]) {
+      const headers = authHeaders(login);
+      if (Object.keys(headers).length) return headers;
+    }
+    return {};
   };
-  window.PassBridgeSaveAuth = (key, type) => {
+  window.PassBridgeRememberAuth = () => Object.keys(authHeaders(readManualLogin(true))).length > 0;
+  window.PassBridgeSaveAuth = (key, type, remember = false) => {
+    const name = sessionKey();
+    if (!name || typeof key !== 'string' || !key.trim()) return;
+    const value = JSON.stringify({ key: key.trim(), type: type === 'x-management-key' ? type : 'bearer' });
+    try { sessionStorage.setItem(name, value); } catch { /* The current page still holds the key. */ }
     try {
-      const name = sessionKey();
-      if (name && typeof key === 'string' && key.trim()) sessionStorage.setItem(name, JSON.stringify({ key: key.trim(), type: type === 'x-management-key' ? type : 'bearer' }));
-    } catch { /* Storage can be blocked; the current page still holds the key. */ }
+      if (remember) localStorage.setItem(name, value);
+      else localStorage.removeItem(name);
+    } catch { /* One blocked store must not prevent using the other. */ }
   };
   window.PassBridgeClearAuth = (rejectedHeaders) => {
-    try {
-      const name = sessionKey();
-      if (!name) return;
-      const saved = authHeaders(readSessionLogin());
-      if (!rejectedHeaders || Object.keys(saved).some(header => saved[header] === rejectedHeaders[header])) sessionStorage.removeItem(name);
-    } catch { /* Clearing a blocked store must not break the page. */ }
+    const name = sessionKey();
+    if (!name) return;
+    for (const persistent of [false, true]) {
+      try {
+        const saved = authHeaders(readManualLogin(persistent));
+        if (!rejectedHeaders || Object.keys(saved).some(header => saved[header] === rejectedHeaders[header])) {
+          (persistent ? localStorage : sessionStorage).removeItem(name);
+        }
+      } catch { /* Clearing a blocked store must not break the page. */ }
+    }
   };
 })();
