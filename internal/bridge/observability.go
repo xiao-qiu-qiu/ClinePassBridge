@@ -1,7 +1,6 @@
 package bridge
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -10,8 +9,8 @@ import (
 
 // Only retain recognized metadata, never arbitrary request strings/content.
 func requestReasoningEffort(payload []byte) string {
-	var j map[string]any
-	if json.Unmarshal(payload, &j) != nil {
+	j, err := decodeObject(payload)
+	if err != nil {
 		return ""
 	}
 	for _, value := range []any{j["reasoning_effort"], object(j["reasoning"])["effort"], object(j["thinking"])["effort"]} {

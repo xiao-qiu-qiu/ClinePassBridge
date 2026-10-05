@@ -17,14 +17,60 @@ func probeService(t *testing.T) *Service {
 
 func callModelTest(t *testing.T, s *Service) ManagementResponse {
 	t.Helper()
+	return callModelTestWithReasoning(t, s, "")
+}
+
+func callModelTestWithReasoning(t *testing.T, s *Service, effort string) ManagementResponse {
+	t.Helper()
 	result, err := s.Handle("management.handle", jsonBytes(ManagementRequest{
 		Method: "POST", Path: apiBase + "/models/test", HostCallbackID: "probe-callback",
-		Body: jsonBytes(map[string]any{"model": "deepseek-flash", "upstream_id": "cline-pass/deepseek-v4.1-flash", "credential_id": "probe-account"}),
+		Body: jsonBytes(map[string]any{"model": "deepseek-flash", "upstream_id": "cline-pass/deepseek-v4.1-flash", "credential_id": "probe-account", "reasoning_effort": effort}),
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return result.(ManagementResponse)
+}
+
+func TestModelProbeReasoningReachesUpstreamAndLog(t *testing.T) {
+	for _, effort := range []string{"", "max", " HIGH ", "none"} {
+		t.Run("effort="+effort, func(t *testing.T) {
+			s := probeService(t)
+			h := newFakeHost(ssePlan(simpleSSE()))
+			want := strings.ToLower(strings.TrimSpace(effort))
+			s.SetHost(func(method string, payload, out any) error {
+				if method == "host.http.do_stream" {
+					body, err := decodeObject(payload.(map[string]any)["body"].([]byte))
+					if err != nil {
+						return err
+					}
+					value, present := body["reasoning_effort"]
+					if str(value) != want || present != (want != "") {
+						t.Errorf("upstream reasoning = %v (present %v), want %q", value, present, want)
+					}
+				}
+				return h.call(method, payload, out)
+			})
+			r := callModelTestWithReasoning(t, s, effort)
+			result, err := decodeObject(r.Body)
+			if err != nil || r.StatusCode != 200 || result["ok"] != true || result["reasoning_effort"] != want {
+				t.Fatalf("probe response: %s; error: %v", r.Body, err)
+			}
+			if len(h.opened) != 1 || len(s.logs) != 1 || s.logs[0].ReasoningEffort != want {
+				t.Fatalf("reasoning log or upstream request missing: %+v", s.logs)
+			}
+		})
+	}
+}
+
+func TestModelProbeRejectsInvalidReasoningBeforeUpstream(t *testing.T) {
+	s := probeService(t)
+	h := newFakeHost()
+	s.SetHost(h.call)
+	r := callModelTestWithReasoning(t, s, "unsupported")
+	if r.StatusCode != 400 || len(h.opened) != 0 || len(s.logs) != 0 {
+		t.Fatalf("invalid effort must be rejected before a probe: status=%d, requests=%d, logs=%d", r.StatusCode, len(h.opened), len(s.logs))
+	}
 }
 
 func TestModelProbeStreamsConfiguredModelAndLogsUsage(t *testing.T) {

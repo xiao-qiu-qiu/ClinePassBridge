@@ -84,7 +84,11 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 		delete(opts, "gateway")
 	}
 	if len(gateway) == 0 {
-		delete(j, "providerOptions")
+		if len(opts) == 0 {
+			delete(j, "providerOptions")
+		} else {
+			j["providerOptions"] = opts
+		}
 		return
 	}
 	if opts == nil {

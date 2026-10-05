@@ -80,11 +80,17 @@ func newCompletion() *completion {
 	return &completion{root: map[string]any{}, choices: map[int64]map[string]any{}, tools: map[int64]map[int64]map[string]any{}, expectedChoices: 1}
 }
 func (c *completion) observe(j map[string]any) {
-	for _, k := range []string{"id", "created", "model", "system_fingerprint", "provider"} {
-		if v, ok := j[k]; ok {
-			c.root[k] = v
+	metadata := map[string]any{}
+	for k, v := range j {
+		switch k {
+		case "choices", "usage", "object", "model", "obfuscation":
+			// Aggregated separately, rewritten for Chat Completions, or
+			// meaningful only for the original stream chunk.
+		default:
+			metadata[k] = v
 		}
 	}
+	mergeObjects(c.root, metadata, false)
 	if u := object(j["usage"]); u != nil {
 		if c.usage == nil {
 			c.usage = map[string]any{}
@@ -322,6 +328,12 @@ func unwrap(body []byte) (map[string]any, error) {
 func observeMetadata(j map[string]any, entry *LogEntry, attempt *Attempt) {
 	apply := func(p, path string) {
 		if p != "" {
+			if strings.HasSuffix(attempt.ProviderSource, ".finalProvider") && !strings.HasSuffix(path, ".finalProvider") {
+				return
+			}
+			if strings.HasSuffix(attempt.ProviderSource, ".resolvedProvider") && path == "provider" {
+				return
+			}
 			entry.Provider = p
 			entry.ProviderSource = path
 			attempt.Provider = p
@@ -347,9 +359,8 @@ func observeMetadata(j map[string]any, entry *LogEntry, attempt *Attempt) {
 		}
 	}
 	for _, root := range roots {
-		pm := object(root.v["provider_metadata"])
-		routing := object(object(pm["gateway"])["routing"])
-		apply(str(routing["finalProvider"]), root.path+"provider_metadata.gateway.routing.finalProvider")
+		p, path := responseRoutingProvider(root.v)
+		apply(p, root.path+path)
 	}
 	if u := object(j["usage"]); u != nil {
 		// Some SSE frames contain only part of usage. Missing fields must not

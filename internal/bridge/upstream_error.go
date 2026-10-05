@@ -19,7 +19,7 @@ var retrySecondsPattern = regexp.MustCompile(`(?i)retry after\s+(\d+(?:\.\d+)?)\
 // Vercel reports the provider it routed to inside the response body. Failures
 // carry the same routing block as successes, but nested in the error text, so
 // the structured lookup is only a fallback-safe first attempt.
-var resolvedProviderPattern = regexp.MustCompile(`"resolvedProvider"\s*:\s*"([^"]+)"`)
+var routingProviderPattern = regexp.MustCompile(`"(finalProvider|resolvedProvider)"\s*:\s*"([^"]+)"`)
 
 // Upstream errors retain the transport status separately from the error inside
 // a successful SSE response. The stable marker is matched by CPA's auth rules.
@@ -35,17 +35,31 @@ type upstreamError struct {
 	ProviderSource string
 }
 
-// routingFacts recovers which upstream provider served or refused the request.
+// responseRoutingProvider recovers the provider from explicit routing metadata.
 // Only explicit routing statements count; candidate lists never do.
-func routingFacts(body map[string]any) (string, string) {
-	routing := object(object(object(body["providerMetadata"])["gateway"])["routing"])
-	for _, key := range []string{"resolvedProvider", "finalProvider"} {
-		if p := str(routing[key]); p != "" {
-			return p, "providerMetadata.gateway.routing." + key
+func responseRoutingProvider(body map[string]any) (string, string) {
+	for _, key := range []string{"finalProvider", "resolvedProvider"} {
+		for _, namespace := range []string{"provider_metadata", "providerMetadata"} {
+			routing := object(object(object(body[namespace])["gateway"])["routing"])
+			if p := str(routing[key]); p != "" {
+				return p, namespace + ".gateway.routing." + key
+			}
 		}
 	}
-	if m := resolvedProviderPattern.FindStringSubmatch(errorMessage(body)); len(m) == 2 {
-		return m[1], "error.message.resolvedProvider"
+	return "", ""
+}
+
+func routingFacts(body map[string]any) (string, string) {
+	if p, path := responseRoutingProvider(body); p != "" {
+		return p, path
+	}
+	matches := routingProviderPattern.FindAllStringSubmatch(errorMessage(body), -1)
+	for _, key := range []string{"finalProvider", "resolvedProvider"} {
+		for _, m := range matches {
+			if m[1] == key {
+				return m[2], "error.message." + key
+			}
+		}
 	}
 	return "", ""
 }

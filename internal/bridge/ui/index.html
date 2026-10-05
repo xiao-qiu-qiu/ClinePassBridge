@@ -453,7 +453,7 @@
       <div class="config-grid">
         <div class="panel">
           <div class="panel-head"><div><h2>模型映射</h2><p class="panel-hint">客户端名称与 Cline Pass 上游模型</p></div><div class="row-actions"><button class="button compact primary" id="openModel" type="button">添加模型</button></div></div>
-          <div class="model-test-tools"><label for="modelTestCredential">测试凭据</label><select class="control" id="modelTestCredential"><option value="">请先添加并启用凭据</option></select><p class="panel-hint">发送一条简短消息 · 结果仅代表所选账号 · 完整响应耗时：&lt;3 秒绿 / 3–10 秒黄 / ≥10 秒红</p></div>
+          <div class="model-test-tools"><label for="modelTestCredential">测试凭据</label><select class="control" id="modelTestCredential"><option value="">请先添加并启用凭据</option></select><label for="modelTestReasoning" title="此测试直接调用上游，不经过 CPA 的 payload 规则。所选值随请求发送，具体支持范围由模型决定。">测试思考强度</label><select class="control" id="modelTestReasoning" title="仅影响模型测试；未指定表示不发送思考强度，不代表关闭思考。"><option value="">未指定</option><option value="none">none</option><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option><option value="ultra">ultra</option><option value="auto">auto</option></select><p class="panel-hint">发送一条简短消息 · 结果仅代表所选账号 · 完整响应耗时：&lt;3 秒绿 / 3–10 秒黄 / ≥10 秒红</p></div>
           <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
           <p class="inline-state" id="modelState"></p>
         </div>
@@ -1014,7 +1014,7 @@
       await loadStatus();
     }
     const modelKey = (model) => JSON.stringify([model.id, model.upstream_id]);
-    const modelTestKey = (model, credential = $('modelTestCredential').value) => JSON.stringify([model.id, model.upstream_id, credential]);
+    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning]);
     function modelTestHTML(test) {
       if (!test) return '';
       if (test.pending) return '<div class="model-test-result"><span class="subtext" role="status">正在连接 Cline，等待完整响应…</span></div>';
@@ -1159,15 +1159,17 @@
       syncProviderProbeControls();
     }
     $('modelTestCredential').addEventListener('change', renderModelRows);
+    $('modelTestReasoning').addEventListener('change', renderModelRows);
     async function testMappedModel(model) {
       const credentialID = $('modelTestCredential').value;
-      const key = modelTestKey(model, credentialID);
+      const reasoning = $('modelTestReasoning').value;
+      const key = modelTestKey(model, credentialID, reasoning);
       if (!credentialID || modelTestResults.get(key)?.pending) return;
       modelTestResults.set(key, { pending: true });
       renderModelRows();
       const started = performance.now();
       try {
-        const result = await api('/models/test', { method: 'POST', fullError: true, body: { model: model.id, upstream_id: model.upstream_id, credential_id: credentialID } });
+        const result = await api('/models/test', { method: 'POST', fullError: true, body: { model: model.id, upstream_id: model.upstream_id, credential_id: credentialID, reasoning_effort: reasoning } });
         if (typeof result?.ok !== 'boolean') throw new Error('测试接口返回了无效结果');
         modelTestResults.set(key, result);
       } catch (error) {

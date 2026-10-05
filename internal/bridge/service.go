@@ -67,6 +67,13 @@ func (s *Service) config() Config {
 	defer s.mu.RUnlock()
 	c := s.cfg
 	c.Models = append([]Model{}, c.Models...)
+	for i := range c.Models {
+		// JSON decoding and validation mutate these slices. A rejected update
+		// must not change live routing; keep nil distinct from an explicit [].
+		if c.Models[i].Providers != nil {
+			c.Models[i].Providers = append([]string{}, c.Models[i].Providers...)
+		}
+	}
 	return c
 }
 func id() string { b := make([]byte, 12); _, _ = rand.Read(b); return hex.EncodeToString(b) }

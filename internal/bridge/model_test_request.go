@@ -49,12 +49,19 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 	}
 	defer s.active.Done()
 	var in struct {
-		Model        string `json:"model"`
-		UpstreamID   string `json:"upstream_id"`
-		CredentialID string `json:"credential_id"`
+		Model           string `json:"model"`
+		UpstreamID      string `json:"upstream_id"`
+		CredentialID    string `json:"credential_id"`
+		ReasoningEffort string `json:"reasoning_effort"`
 	}
 	if err := json.Unmarshal(r.Body, &in); err != nil || in.Model == "" || in.CredentialID == "" {
 		return managementJSON(400, map[string]any{"error": "请选择模型与测试凭据"})
+	}
+	in.ReasoningEffort = strings.ToLower(strings.TrimSpace(in.ReasoningEffort))
+	switch in.ReasoningEffort {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "auto":
+	default:
+		return managementJSON(400, map[string]any{"error": "无效的测试思考强度"})
 	}
 	upstream, err := s.resolveModel(in.Model)
 	if err != nil {
@@ -78,10 +85,17 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 
 	cfg := s.config()
 	start := time.Now()
+	body := map[string]any{
+		"messages":   []any{map[string]any{"role": "user", "content": "Reply with OK only."}},
+		"max_tokens": 64,
+	}
+	if in.ReasoningEffort != "" {
+		body["reasoning_effort"] = in.ReasoningEffort
+	}
 	req := ExecutorRequest{
 		AuthID: in.CredentialID, Model: in.Model, HostCallbackID: r.HostCallbackID,
 		deadline: start.Add(time.Duration(cfg.TimeoutSeconds) * time.Second),
-		Payload:  []byte(`{"messages":[{"role":"user","content":"Reply with OK only."}],"max_tokens":64}`),
+		Payload:  jsonBytes(body),
 	}
 	j, credential, upstream, err := s.prepare(req)
 	if err == nil && upstream != in.UpstreamID {
@@ -139,6 +153,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		"ok": err == nil, "status": statusOf(err), "error": detail, "duration_ms": duration,
 		"ttft_ms": entry.TTFTMS, "model": in.Model, "upstream_id": upstream,
 		"credential_id": credential.ID, "credential_label": credential.Label,
-		"provider": entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
+		"reasoning_effort": entry.ReasoningEffort,
+		"provider":         entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
 	})
 }

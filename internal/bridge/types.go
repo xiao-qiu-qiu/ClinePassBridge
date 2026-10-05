@@ -1,15 +1,17 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
 
-const Version = "0.2.11"
+const Version = "0.2.12"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
@@ -277,14 +279,26 @@ func number(v any) int64 {
 	case float64:
 		return int64(n)
 	case json.Number:
-		i, _ := n.Int64()
-		return i
+		if i, err := n.Int64(); err == nil {
+			return i
+		}
+		if f, err := n.Float64(); err == nil {
+			return int64(f)
+		}
 	}
 	return 0
 }
 func decodeObject(b []byte) (map[string]any, error) {
 	var j map[string]any
-	if err := json.Unmarshal(b, &j); err != nil || j == nil {
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	// Requests and response extensions may carry int64 IDs, seeds or schema
+	// constants. Preserve their JSON values rather than rounding via float64.
+	decoder.UseNumber()
+	if err := decoder.Decode(&j); err != nil || j == nil {
+		return nil, fail(502, "upstream returned invalid JSON")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
 		return nil, fail(502, "upstream returned invalid JSON")
 	}
 	return j, nil

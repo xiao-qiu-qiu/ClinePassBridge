@@ -79,12 +79,14 @@ func (s *Service) affinityFile(c Credential) (affinityFile, error) {
 
 // Rotated credentials must only go through the watcher. host.auth.save also
 // upserts a generic filename-based ID and would resurrect an obsolete auth.
+// Both paths merge into the original file so plugin-unknown fields survive.
 func (s *Service) saveCredential(c Credential) error {
 	s.mu.RLock()
-	current, filename := s.creds[c.ID], s.authFiles[c.ID]
+	current, filename, dir := s.creds[c.ID], s.authFiles[c.ID], s.authDir
 	s.mu.RUnlock()
 	c.RequestScopedErrors = requestErrorRules()
-	if current.RoutingID != "" {
+	body := json.RawMessage(jsonBytes(c))
+	if current.RoutingID != "" || (dir != "" && filename != "") {
 		file, err := s.affinityFile(current)
 		if err != nil {
 			return err
@@ -97,14 +99,18 @@ func (s *Service) saveCredential(c Credential) error {
 		for key, value := range fields {
 			file.updated[key] = value
 		}
-		if err := atomicJSON(file.path, file.updated); err != nil {
-			return err
+		body = json.RawMessage(jsonBytes(file.updated))
+		if current.RoutingID != "" {
+			if err := atomicJSON(file.path, file.updated); err != nil {
+				return err
+			}
 		}
-	} else {
+	}
+	if current.RoutingID == "" {
 		if filename == "" {
 			filename = c.ID + ".json"
 		}
-		if err := s.call("host.auth.save", map[string]any{"name": filename, "json": json.RawMessage(jsonBytes(c))}, nil); err != nil {
+		if err := s.call("host.auth.save", map[string]any{"name": filename, "json": body}, nil); err != nil {
 			return err
 		}
 	}

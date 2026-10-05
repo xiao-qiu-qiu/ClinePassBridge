@@ -591,6 +591,7 @@ func TestObservabilityReasoningMetadataWhitelist(t *testing.T) {
 		{"wrong field types", `{"reasoning_effort":true,"reasoning":"high","thinking":["max"]}`, ""},
 		{"messages ignored", `{"messages":[{"role":"user","content":"reasoning_effort: high"}]}`, ""},
 		{"missing metadata", `{}`, ""},
+		{"unrelated large number", `{"reasoning_effort":"max","metadata":{"limit":1e400}}`, "max"},
 		{"malformed JSON", `{"reasoning_effort":`, ""},
 		{"array root", `["high"]`, ""},
 		{"null root", `null`, ""},
