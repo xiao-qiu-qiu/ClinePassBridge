@@ -1,27 +1,18 @@
 # ClinePassBridge
 
-ClinePassBridge 是 [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) 的 Cline Pass 插件。它把 Cline Pass API key 接入 CPA 的凭据系统，提供模型别名映射、Chat Completions 协议适配、真实 SSE 流及请求观测等功能。
+把 Cline Pass 接入 [CLIProxyAPI（CPA）](https://github.com/router-for-me/CLIProxyAPI)，通过 CPA 的 OpenAI 兼容接口调用模型。
 
 ## 功能
 
-- 在插件管理页导入 Cline Pass API key，凭据交给 CPA 的 `auth-dir` 保存；插件状态目录不保存 key。每条凭据可设置**优先级**（1–100，留空表示不设置）：数值越大越优先被 CPA 调度。插件只把该值写进凭据文件，具体调度与是否生效由 CPA 决定；会话黏性沿用 CPA 自带的 `routing.session-affinity`，插件不另建机制。
-- 按用户配置的映射列表，将客户端模型名映射为指定上游 ID；初始列表为空。
-- “添加模型”弹窗内可获取上游模型；获取后默认使用不带 `cline-pass/` 的客户端名称，映射到带 `cline-pass/` 前缀的服务端模型。
-- 非流式支持 `native`（解包 Cline 原生 `success/data`）、`native-fallback`（原生遇到空内容错误时尝试流式聚合）和 `stream-aggregate`（直接由 SSE 聚合）三种模式。默认 `stream-aggregate`，直接聚合上游 SSE 后返回 JSON，跳过原生非流式尝试。规避 Cline 原生非流式空响应导致的 500 错误。
-- 流式请求转发为真正的 SSE，处理跨网络分块的事件、用量与终止信号；从上游响应元数据记录实际 provider。
-- 管理页展示凭据、模型映射、请求状态、耗时、用量、实际 provider、**实际使用的凭据**和尝试记录。被本地退避拦下的请求没有上游 provider，列表与详情统一显示为「本地退避」，并可用该值筛选。
-- 请求日志将凭据与请求指定的思考强度单独列出，请求编号在展开详情中查看。耗时采用首字/总耗时双色标记，用量显示输出 token 速率；未提供思考强度的旧记录显示空缺，不推断模型默认值。
-- 同凭据、同模型、同一轮退避的本地拦截合并为计数记录，保留首次/末次时间和代表请求编号，真实上游限流及恢复探测仍独立记录。模型别名、流式模式和思考强度分别统计，防止筛选混淆。
-- 统计卡片独立持久累计总请求数、输入/输出/缓存 tokens、平均输出速率和输入缓存命中率，可选择全部、今天、最近时段或自定义分钟范围。统计以请求完成时间计入，不受请求日志保留条数或列表搜索筛选影响；首次升级仅导入当时仍保留的日志，已淘汰历史不补造。配置概览可确认清空统计，不影响请求日志、凭据和套餐额度估算。
-- 每条映射支持“测试模型”，可选择测试凭据，发送简短消息验证是否能完整返回响应。完整响应耗时按绿（小于 3 秒）、黄（3–10 秒）、红（10 秒及以上）显示；失败或超时标红，点击可展开完整错误详情，敏感密钥会被遮蔽。
-- 每条模型映射可选填「上游 provider 允许列表」：留空保持自动路由；只填一个即强制固定到该上游；填多个则限定上游只能在这些托管方之间选择。Cline 侧的同一个模型通常由多家托管方共同承载，固定列表用于避开被限流的一家。「钉上游」页把全部模型的允许列表和上游 provider 策略集中在一处编辑，无需逐个打开模型弹窗。首次使用（模型从未设置过该字段）时，DeepSeek 系列会自动填入单 `deepseek`；其他模型保持自动路由。可固定的上游不是固定清单，而是按模型**探测**得到：点「探测可钉上游」向该模型发一个极小请求，从上游回报的路由信息里读出候选（也可用「探测全部模型」逐个探测）。结果依赖所用凭据——被上游转到私有通道的账号不会回报候选，因此该页提供凭据选择器，切换后需重新探测。把列表显式清空表示不再固定，不会被重新填回。该页顶部有当前生效状况的提示：上游目前只对部分模型应用白名单。
+- 管理多个 Cline Pass API key，设置账号优先级，查看套餐用量和额度估计。
+- 自定义模型名称，选择上游 provider，按模型设置思考强度映射。
+- 支持 SSE 流式输出，也能将上游流式响应合并为普通 JSON。
+- 查看请求日志、实际使用的账号和 provider、首字耗时、输出速率及缓存命中率。
+- 在管理页测试模型；遇到上游团队限流时短暂退避，减少重复请求。
 
-模型测试固定使用流式聚合，沿用请求超时设置，请求设置 `max_tokens: 64`，不自动重试或切换账号；会消耗所选账号的少量额度，并计入请求日志与用量统计。可在「测试思考强度」显式选择 `max` 等值，测试请求通过 `reasoning_effort` 发送，启用当前模型的思考强度映射后，仅命中的规则会先转换，再发往上游；日志显示传入与发出值。选「未指定」时，以「未设置」作为映射输入，默认仍省略该字段。测试选项不包含 `ultra` 和 `auto`，`none` 排在「未指定」之后、`minimal` 之前。支持的强度和 token 限制语义由上游模型决定，强思考可能增加耗时或耗尽输出预算。此管理页测试直接调用 Cline，不经过 CPA 全局 payload 规则；测试结果不用于判断正式调用的规则是否生效。结果显示这次响应报告的实际上游；未报告时显示未知，本地退避时显示未调用。错误详情受配置中的最大响应大小限制，超过上限时明确标记截断。凭据独立代理暂不支持此管理页测试，普通全局代理可用。
+## 安装与配置
 
-
-## 安装
-
-ClinePassBridge 已收录到 CPA 内置官方插件市场，启用插件后直接搜索安装即可，无需添加额外市场源。需要 CLIProxyAPI v7.3.12 或兼容的插件 ABI。以下是通用配置片段，按现有配置合并：
+需要支持动态库插件、且与本插件接口兼容的 CPA。先在 CPA 配置中启用插件：
 
 ```yaml
 plugins:
@@ -29,35 +20,26 @@ plugins:
   dir: plugins
 ```
 
-在 CPA 的插件市场找到来源为 **CLIProxyAPI源（官方源）** 的 **ClinePassBridge** 并安装。市场从本仓库 Release 下载与宿主平台匹配的 ZIP 和 `checksums.txt`，核验 ZIP 的 SHA-256。各 ZIP 根目录分别是 `clinepassbridge.so`（Linux）、`clinepassbridge.dylib`（macOS）或 `clinepassbridge.dll`（Windows）；安装后的文件名带版本，但插件 ID 始终是 `clinepassbridge`。
+1. 在 CPA 插件市场的 **CLIProxyAPI源（官方源）** 中安装 **ClinePassBridge**。
+2. 打开插件管理页：`/v0/resource/plugins/clinepassbridge/console`。
+3. 点击「添加凭据」，填入 Cline Pass API key。
+4. 点击「添加模型 → 获取上游模型」，勾选要使用的模型，也可以手动添加映射。
 
-市场安装会写入插件配置。插件加载后打开：
+管理页会尝试沿用 CPA / CPAMP 记住的登录信息。若提示输入密钥，直连 CPA 时填 CPA 管理密钥，经 CPAMP 完整模式访问时填该面板的管理密钥。勾选「在此浏览器记住管理密钥」后，下次打开可继续使用。
 
-```text
-/v0/resource/plugins/clinepassbridge/console
-```
+首次安装的模型列表为空，需要先添加模型。导入时默认去掉客户端名称的 `cline-pass/` 前缀，上游 ID 保留前缀；模型是否可用取决于账号的套餐权限。
 
-页面复用同源 CPA / CPAMP 通过“记住密码”保存的登录信息，兼容明文及 `enc::v1`、`enc::v2` 存储格式，并核对服务器地址（含根地址及 `/v0/management`、`/v8/management` 后缀）。未保存登录信息或管理中心跨域时，可输入**当前入口的管理密钥**：直接访问 CPA 使用 CPA 管理密钥，经 CPAMP 完整模式访问则使用该面板的管理密钥。
+## 调用模型
 
-手动密钥仅在 API 验证成功后保存，默认保留到标签页会话结束；勾选“在此浏览器记住管理密钥”后存入当前站点的 `localStorage`，下次打开可继续使用。两种保存方式均按服务地址与代理路径隔离；“清除密钥”或该密钥收到 401 会删除插件保存的对应记录，不修改管理面板的登录信息。浏览器限制存储时使用其允许的存储方式，或仅保留在当前页面内存。CPA 管理 API 必须已启用，接口鉴权仍由当前管理入口控制。进入页面后点“添加凭据”，导入自己的 Cline Pass API key，再检查或选择模型映射。
+客户端使用 CPA 的 API 地址和客户端 API key。请求中的 `model` 要与管理页的「客户端模型名称」一致。
 
-页面没有管理密钥时直接提示输入，不发送管理请求。复用登录或提交手动密钥时，先共享一次只读 `/status` 验证，成功后才加载统计、日志和配置；验证期间重复提交不会再发送请求。遇到 401 / 403 后暂停后续管理请求与套餐用量轮询，等待手动重新验证。403 会保留已保存密钥；若 CPA 明确返回 IP 封锁及等待时间，弹窗显示本地倒计时，等待期间停用验证按钮，到期后仍需手动验证，不自动重试。
+例如，添加以下映射：
 
-插件配置与请求记录默认写在 `plugins/clinepassbridge-data`；凭据文件写在 CPA 配置的 `auth-dir`。使用容器时，应分别持久化这两个目录及插件目录。备份时也应覆盖这两处数据。
+| 客户端模型名称 | 上游模型 ID |
+| --- | --- |
+| `deepseek-flash` | `cline-pass/deepseek-v4.1-flash` |
 
-累计统计使用 `statistics.json` 记录统计起点与当前代次，按 UTC 日期保存 `statistics/<代次>/YYYY-MM-DD.json` 的分钟计数。清空时切换到新代次，旧代次保留为恢复副本。总 tokens 为输入加输出，缓存 tokens 已包含在输入中；缓存命中率为缓存输入除以总输入。单次输出速率为输出 tokens 除以总耗时减首字等待，未记录首字时使用总耗时；平均速率为有效样本的总输出除以总有效耗时。无输出或耗时无效的请求不加入速率样本；有效输出时长不足 0.5 秒的请求排除在平均速率之外，单条仍显示原始速率。升级时仅在保留明细完整覆盖原分钟计数时重算该分钟的旧速率样本，否则排除该分钟旧速率并显示提示；累计请求数和 token 数不变。本地拦截不计消费和速率，重复拦截计数最多约每2秒落盘，正常卸载补写，异常退出可能损失末尾一小段计数。
-
-调高账号优先级后，旧对话可能仍使用之前的账号。在「配置概览」点击 **重新分配会话**，确认后会清除本插件账号的旧绑定，后续请求按当前优先级重新选择可用账号。操作也覆盖空闲对话，无需停用账号或在等待期间发送消息；正在生成的回复继续完成。
-
-重分配通过更换凭据中的 `routing_id` 让 CPA 删除旧登记及其会话绑定；账号业务 ID、密钥、优先级、启用状态、插件日志和额度记录保持。接口确认每个凭据文件只剩一个新登记后才返回成功。恢复副本保存在 CPA `auth-dir/.clinepassbridge-affinity-backups/`，包含密钥，应随凭据目录一起保管。首次重分配会先统一旧版账号登记，清理由两种登记方式产生的重复身份，再完成重分配。
-
-## 模型与路由
-
-客户端调用 CPA 的 OpenAI 兼容接口时，`model` 必须与管理页映射列表中的“客户端模型名称”完全一致。插件仅注册并接受已配置的名称，不自动添加别名，也不会把“上游模型 ID”隐式当成另一个客户端名称；如需直接使用上游 ID 调用，请单独添加同名映射。
-
-初次安装的映射列表为空。可以手动添加，或点击“添加模型 → 获取上游模型”，勾选后确认添加。还需确认 Cline Pass 账号有对应模型的使用资格，模型目录出现某个 ID 不代表订阅可调用。
-
-例如，先添加客户端名称 `deepseek-flash`、上游 ID `cline-pass/deepseek-v4.1-flash` 的映射，然后才能通过本插件发起以下请求：
+然后向 CPA 的 `/v1/chat/completions` 发送：
 
 ```json
 {
@@ -67,106 +49,32 @@ plugins:
 }
 ```
 
-升级会保留已保存的映射列表。旧版默认映射若已写入配置，也会作为已有配置保留；不需要的条目可在管理页删除，删除或清空后不会自动补回。
+几个常用设置：
 
-日志中的实际 provider 来自上游响应；未回报时显示“未知”。请求失败时也会从上游错误正文里取出本次实际命中的 provider，并记录它来自哪个字段，因此限流记录同样能看出是哪一家托管方。
+- **非流式模式**：默认 `stream-aggregate`，客户端收到普通 JSON，上游仍使用流式请求。
+- **请求超时**：新装默认 600 秒。升级会保留原设置，长任务可在「请求与日志设置」中调高。
+- **思考强度映射**：默认关闭，按模型单独配置。例如将 `medium` 映射为 `high`，日志会显示 `medium → high`。
+- **账号优先级**：数值越大越优先，实际调度由 CPA 决定。调整后若希望已有对话重新选账号，可在「配置概览」点击「重新分配会话」。
 
-思考强度列在命中当前模型的映射规则时显示传入值与发出值，否则记录插件收到的显式请求参数，`—` 表示没有识别到强度字段，不表示模型关闭了思考。映射关闭或未命中规则时，正式调用保留请求里的 `reasoning_effort` 等字段和 `providerOptions` 中的模型参数；映射开启时仅转换命中规则的顶层 `reasoning_effort`，provider 路由策略只处理 `gateway` 命名空间。依赖 CPA 全局 payload 规则注入强度时，宿主必须在插件执行前应用规则；已核对的原版 CPA v8.0.13 插件执行链路缺少此步骤，仅升级本插件不会补齐宿主行为。可在客户端请求中显式传入 `reasoning_effort`，并用一次正式调用核对插件日志与上游出站请求。
+模型测试会消耗所选账号的少量额度。它直接调用 Cline；要确认 CPA 全局规则是否生效，需要通过客户端发起正式请求。
 
-Cline 会把请求里的 `providerOptions.gateway` 原样转交给上层的 Vercel AI Gateway：`only` 是白名单，`order` 只是优先级提示，网关仍可能在同一白名单内自行改选。因此只列一个托管方时请求必定固定（该家满容量时整条请求会失败），列多个时则由网关在白名单内回退。日志展示的 provider 正是网关实际使用的那一家。
+## 文档
 
-「上游 provider 策略」在「钉上游」页，决定调用方自己传的 `providerOptions.gateway`（以及等价的顶层 `provider` 简写）如何处理。默认「插件配置优先」：忽略调用方传来的 provider 字段，只有插件里配置的列表生效；未配置列表的模型仍走自动路由。切为「客户端优先」后，调用方传入的字段优先生效，未传的字段由插件配置补齐。两种策略下，被限流而本地退避的请求都会标注是等待哪一家托管方。
+- [进阶配置](docs/configuration.md)：登录与备份、上游选择、思考强度映射、日志和限流。
+- [套餐用量](docs/plan-usage.md)：用量查询、额度估计的计算方式和误差。
 
-「凭据与套餐用量」现支持按账号估计 5 小时、每周、每月的总额度与剩余额度：5 小时/每周结合用量比例变化和请求 token，月总额度按周总额度的两倍估算，按 [Cline 官网参考价格](https://docs.cline.bot/getting-started/clinepass#reference-pricing)折算 USD；关闭页面仍继续采样，同账号多 Key 共享估算，不同账号独立。额度增长 1 个百分点先显示带黄色提示的初步估值，累计 2 个百分点后校准。额度周期重置后继续显示上次有效估值，新周期采够样本后自动更新。失败或缺失用量时保留已知消费，结果以单值展示，误差原因放在悬停提示中。采样条件、缓存计费和估算误差见 [套餐用量说明](docs/plan-usage.md#额度估计)。
-
-### 思考强度映射
-
-每个模型通过自己的 `Model.reasoning_mapping` 独立保存开关与规则，**默认关闭**，仅对该模型的正式请求、模型测试与上游探测生效；即使多个客户端别名指向同一上游 ID，也分别配置。「配置概览 → 思考强度映射」的模型选择器只选择已保存模型；切换模型时保留各自尚未保存的规则修改。开关、规则和「恢复默认表」均只作用于所选模型，保存使用下述逐模型专用接口。
-
-模型未配置 `reasoning_mapping` 时，仅按 `upstream_id` 是否包含 `deepseek`（不区分大小写）决定预填表，不根据客户端别名判断：DeepSeek 预填下面的旧默认规则，其他模型使用空 `rules: {}`，由用户自行选择规则。预填规则不会自动开启映射。「恢复默认表」也按当前模型的 `upstream_id` 恢复对应规则表。DeepSeek 预填表依据 [DeepSeek 官方思考模式文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode)：
-
-| 请求传入 | DeepSeek 预填映射为 |
-| --- | --- |
-| 未设置 | 未设置 |
-| none | none |
-| minimal、low | low |
-| medium、high、xhigh | high |
-| max、ultra | max |
-
-规则表支持点击「添加规则」新增行，或通过每行的「删除」移除规则；左右两侧均为可选择的下拉框，分别设置来源强度与目标强度。左侧来源可选 `unset/none/minimal/low/medium/high/xhigh/max/ultra`，按此顺序排列；`unset` 在 UI 中显示为「未设置」，`none` 排在「未设置」之后、`minimal` 之前。右侧目标可选「未设置」、`none/minimal/low/medium/high/xhigh/max`，顺序同上。
-
-保存时检查当前模型的左侧来源：同一来源重复会提示重复的来源强度并阻止保存，需调整来源或删除重复行；多个不同来源可以映射到同一目标。新增、修改或删除规则均在保存后生效，仍以来源为键、目标为值保存到该模型的 `rules` 对象，沿用已有 API 契约。
-
-删除一行并保存后，会从该模型的 `rules` 中移除这条规则；该来源的请求保留原值，不保存空字符串目标。目标「未设置」（`unset`）表示命中时移除请求的顶层 `reasoning_effort`，由上游决定默认行为；例如可将「未设置 → max」用于补齐未传强度的请求。请求里的空字符串和 JSON `null` 也视作未设置；若已有顶层 `thinking` 或 `reasoning` 配置而没有顶层强度，则保留该策略，不注入默认值。未知强度、其他思考参数及 `providerOptions` 原样保留；映射不额外改写思考开关或 token 预算。
-
-规则表可以删除至零行；保存为空 `rules: {}` 时，即使映射开关开启也全部透传。显式配置 `reasoning_mapping: {}` 或 `rules: {}` 表示空规则，**不会补入默认表**；其中 `reasoning_mapping: {}` 的开关默认为关闭。部分规则仅映射命中的输入，未配置规则的强度均透传，例如只配置 `medium: high`，就只转换 `medium`，`low`、`max` 及未设置输入均保持原样。
-
-日志在命中规则时显示 `medium → high`、`未设置 → max`、`low → low`；关闭映射或未命中时保持单值。`reasoning_effort` 日志字段记录转换后识别到的强度，新增 `reasoning_mapping: {"from":"medium","to":"high"}` 记录本次映射（`unset` 表示未设置）。本地退避记录也保存计划映射，但会明确标记未调用上游；来源不同的映射不会合并成同一条退避记录。修改配置不会重写历史日志。
-
-配置 API `/config` 与插件 YAML 都把 `reasoning_mapping` 放在 `models` 中的对应模型条目内，例如：
-
-```yaml
-models:
-  - id: deepseek-flash
-    upstream_id: cline-pass/deepseek-v4.1-flash
-    reasoning_mapping:
-      enabled: true
-      rules:
-        unset: max
-        medium: high
-```
-
-管理页保存已配置模型的映射使用 `PUT /models/reasoning`（完整路径为 `/v0/management/clinepassbridge/models/reasoning`），请求 body 包含 `model`、`upstream_id` 和 `reasoning_mapping`：
-
-```json
-{
-  "model": "deepseek-flash",
-  "upstream_id": "cline-pass/deepseek-v4.1-flash",
-  "reasoning_mapping": {
-    "enabled": true,
-    "rules": {"medium": "high"}
-  }
-}
-```
-
-接口只完整替换目标模型的 `reasoning_mapping`，不合并旧规则，不修改其他模型或全局设置；`model` 指客户端模型名称，`upstream_id` 用于核对当前条目。目标模型不存在时返回 404，上游 ID 已变更时返回 409，需刷新后重试。要删除一条规则，提交剩余规则表；要全部清空，提交 `"rules": {}`，保留或关闭开关由 `enabled` 指定。
-
-`Config` 顶层旧 `reasoning_mapping` 用于兼容旧配置输入，配置加载与管理 API 接收旧格式时均会在 `validate` 校验中迁移：只将旧开关与规则复制给尚未配置 `Model.reasoning_mapping`、且 `upstream_id` 包含 `deepseek` 的模型；其他尚未配置的模型保持关闭和空规则。已配置的模型（包括显式空 `{}`）保持自身配置，不继承旧顶层规则。迁移后按逐模型配置保存，顶层旧字段不参与运行时全局映射；新配置使用 `models[].reasoning_mapping`，管理页逐模型保存使用上述专用接口。
-
-映射在 CPA 已完成的转换和 payload 规则之后、Cline 出站请求之前应用，每个请求只执行一次，原生非流式回退到流式时沿用同一结果。上游对各强度的实际支持范围仍由所选模型决定。
-
-请求总时长上限（含思考和输出）新装默认 **600 秒**，避免旧默认 180 秒过早截断长任务（[Issue #1](https://github.com/xiao-qiu-qiu/ClinePassBridge/issues/1)）。升级保留已保存的超时设置；原来仍为 180 秒的用户可在「请求与日志设置」手动调至 600 秒或更高，允许范围 10–1800 秒。
-
-非流式三种模式用于应对 Cline 返回格式和偶发空内容，推荐的 `stream-aggregate` 从第一次请求就使用流式上游，客户端仍收到非流式 JSON；它不会消除上游本身的错误。可选的 `native-fallback` 可能产生第二次上游请求。SSE 一旦开始向客户端输出，就不进行透明重试。上游错误、订阅额度与模型可用性仍由 Cline 决定。
-
-CPA v7.3.12 的 Chat Completions 流式接口由宿主封装 SSE，插件提交原始 JSON 并由宿主发送结束标记。标准 `/v1/messages` 路由的 Claude 转换器要求 SSE 输入，插件依据宿主传入的 `request_path` 适配；未携带此元数据的内部 Claude 调用尚未覆盖。
-
-上游正常关闭连接、所有输出均有非空 `finish_reason` 且工具调用参数完整时，插件兼容缺少 `[DONE]` 的流；Responses 接口由 CPA 完成协议转换与结束事件。半截 SSE、未完成的输出及传输错误仍报错，已输出的请求不自动重试。请求日志的 `stream_end` 可区分正常标记 `done`、完成后的 EOF `eof_after_finish` 和不完整 EOF；缺少结束信号的错误还会记录输出是否开始、choice 是否全部结束，便于与 Cline 限流或真实中断区分。
-
-## 上游团队限流
-
-上游团队/区域的输入 token 每分钟额度触顶时，插件将 HTTP200 中的 SSE 限流错误识别为 **429 / `upstream_team_rate_limited`**，错误文字带 `[clinepassbridge:team_tpm_limit]`，管理页显示“上游团队限流”。普通请求频率限制保留 `upstream_rate_limited`，套餐额度耗尽单独记录 `upstream_quota_exhausted`；这三类不混为账号失效。
-
-流式调用会在首次实际输出前暂存少量角色/元数据帧，遇到团队限流时通过结构化错误返回宿主。仅该专用标识匹配 CPA 的请求级 `stop` 规则，跳过本次错误造成的凭据冷却并停止宿主继续尝试。普通429、认证失败及套餐耗尽仍沿用宿主原有策略；已有冷却也不会被这条规则清除。此链路的集成验证基准为 CPA v8.0.4。
-
-插件按凭据和真实上游模型维护内存中的短期退避，同模型多个别名共用窗口。优先读取 `Retry-After` 或已知错误中的 `Retry after Ns`，缺失时等待60秒；窗口内直接返回明确的团队限流，不再访问上游，也不新增未知消费。到期仅放行一个恢复探测；探测在输出前取消或失败时，继续保留短暂退避。普通429不会开启这套团队限流窗口。插件重载后窗口重建，后续请求将重新探测上游。
-
-请求日志通过 `error_kind`、`upstream_http_status`、`upstream_error_status`、`retry_at`、`rate_limit_scope` 和 `upstream_skipped` 分别记录错误类别、外层/内层状态、重试时间及本地拦截。第一版不自动重放模型请求；开始输出后的错误仍通过 CPA 现有流错误接口传递，完整状态传播需要宿主支持结构化流错误。
+容器部署时，请持久化插件目录、CPA 的 `auth-dir` 和插件数据目录（默认 `plugins/clinepassbridge-data`）。API key 保存在 `auth-dir`，配置、日志和统计保存在插件数据目录。
 
 ## 从源码构建
 
-项目使用 Go 1.26、标准 C ABI 和 `gopkg.in/yaml.v3`。在仓库根目录执行：
+在仓库根目录执行以下命令，需要 Docker，产物为 `dist/clinepassbridge.so`（Linux amd64）：
 
 ```bash
 docker build --platform linux/amd64 -f Dockerfile.build --output type=local,dest=dist .
 ```
 
-构建阶段使用 `golang:1.26-bookworm`，并以 `CGO_ENABLED=1`、`-buildmode=c-shared` 编译 `./cmd/passbridge`。输出 `dist/clinepassbridge.so`，目标为 Debian 12 兼容的 Linux amd64 动态库。本地 Windows 无需安装 C 编译器，构建交给 Docker。
+项目使用 Go 1.26。[发布工作流](.github/workflows/release.yml) 构建 Linux、macOS 的 amd64 / arm64 和 Windows amd64，并生成 ZIP 包与 `checksums.txt`。
 
-[构建工作流](.github/workflows/release.yml) 在普通 push 和 PR 中分别测试并构建五个平台：Linux amd64 使用 Debian 12 Docker 构建，Linux arm64 在 `ubuntu-24.04-arm` 上使用同一 Go 镜像；macOS amd64/arm64 使用原生 `macos-15-intel`/`macos-15`；Windows amd64 使用 `windows-latest` 和 MSYS2 UCRT64 GCC。只有推送与源码版本一致的 `v<version>` 标签且五个作业全部通过时，工作流才汇总发布五个 ZIP 与统一的 `checksums.txt`。资产命名遵循 [CPA 官方插件市场规范](https://github.com/router-for-me/CLIProxyAPI-Plugins-Store#release-requirements)。
+## 许可
 
-市场 registry 使用 CPA v7.3.12 的 `schema_version: 1`、`github-release` 安装类型。它是 CPA 商店入口，不是一个可直接安装的 `.so` URL；若使用自己的市场源，也必须托管符合该 schema 的 JSON registry，并提供对应 GitHub Release 资产。
-
-## 许可与来源
-
-本项目按 [MIT License](LICENSE) 发布。ClinePassBridge 为独立实现；[`cline-pass-switcher`](https://github.com/munmunjaklin458-afk/cline-pass-switcher) 只作为公开协议行为的研究参考，没有复制其代码。Cline Pass 与 CLIProxyAPI 分别由各自项目维护。
+[MIT License](LICENSE)。独立实现，曾参考 [`cline-pass-switcher`](https://github.com/munmunjaklin458-afk/cline-pass-switcher) 的公开协议行为，未复制其代码。
