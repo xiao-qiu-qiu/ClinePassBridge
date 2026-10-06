@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const Version = "0.2.12"
+const Version = "0.2.13"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
@@ -118,25 +118,57 @@ func requestErrorRules() []RequestErrorRule {
 }
 
 type Model struct {
-	ID         string   `json:"id" yaml:"id"`
-	UpstreamID string   `json:"upstream_id" yaml:"upstream_id"`
-	Providers  []string `json:"providers" yaml:"providers"`
+	ReasoningMapping *ReasoningMappingConfig `json:"reasoning_mapping,omitempty" yaml:"reasoning_mapping,omitempty"`
+	ID               string                  `json:"id" yaml:"id"`
+	UpstreamID       string                  `json:"upstream_id" yaml:"upstream_id"`
+	Providers        []string                `json:"providers" yaml:"providers"`
 }
 type Config struct {
-	DataDir          string  `json:"data_dir" yaml:"data_dir"`
-	BaseURL          string  `json:"base_url" yaml:"base_url"`
-	Models           []Model `json:"models" yaml:"models"`
-	NonstreamMode    string  `json:"nonstream_mode" yaml:"nonstream_mode"`
-	ProviderPolicy   string  `json:"provider_policy" yaml:"provider_policy"`
-	TimeoutSeconds   int     `json:"timeout_seconds" yaml:"timeout_seconds"`
-	LogRetention     int     `json:"log_retention" yaml:"log_retention"`
-	MaxResponseBytes int     `json:"max_response_bytes" yaml:"max_response_bytes"`
+	ReasoningMapping *ReasoningMappingConfig `json:"reasoning_mapping,omitempty" yaml:"reasoning_mapping,omitempty"` // Legacy global mapping; migrated during validation.
+	DataDir          string                  `json:"data_dir" yaml:"data_dir"`
+	BaseURL          string                  `json:"base_url" yaml:"base_url"`
+	Models           []Model                 `json:"models" yaml:"models"`
+	NonstreamMode    string                  `json:"nonstream_mode" yaml:"nonstream_mode"`
+	ProviderPolicy   string                  `json:"provider_policy" yaml:"provider_policy"`
+	TimeoutSeconds   int                     `json:"timeout_seconds" yaml:"timeout_seconds"`
+	LogRetention     int                     `json:"log_retention" yaml:"log_retention"`
+	MaxResponseBytes int                     `json:"max_response_bytes" yaml:"max_response_bytes"`
 }
 
 func defaultConfig() Config {
 	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{}, NonstreamMode: "stream-aggregate", ProviderPolicy: ProviderPolicyConfig, TimeoutSeconds: 600, LogRetention: 1000, MaxResponseBytes: 16 << 20}
 }
+
+// Scalar settings support partial updates, but supplied collections replace the
+// old value. Reusing slice elements or maps would move rules between models or
+// retain deleted rules when JSON explicitly supplies an empty object.
+func decodeConfigJSON(raw []byte, cfg *Config) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	next := *cfg
+	for key := range fields {
+		switch {
+		case strings.EqualFold(key, "models"):
+			next.Models = nil
+		case strings.EqualFold(key, "reasoning_mapping"):
+			next.ReasoningMapping = nil
+		}
+	}
+	if err := json.Unmarshal(raw, &next); err != nil {
+		return err
+	}
+	*cfg = next
+	return nil
+}
+
 func (c *Config) validate() error {
+	if c.ReasoningMapping != nil {
+		if err := c.ReasoningMapping.validate(); err != nil {
+			return err
+		}
+	}
 	u, e := url.Parse(c.BaseURL)
 	if e != nil || u.Scheme != "https" || u.Host != "api.cline.bot" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimRight(u.Path, "/") != "/api/v1" {
 		return fail(400, "base_url must be https://api.cline.bot/api/v1")
@@ -169,6 +201,16 @@ func (c *Config) validate() error {
 			return fail(400, "model aliases must be nonempty and unique")
 		}
 		seen[m.ID] = true
+		if m.ReasoningMapping == nil {
+			m.ReasoningMapping = defaultModelReasoningMapping(m.UpstreamID)
+			if c.ReasoningMapping != nil && strings.Contains(strings.ToLower(m.UpstreamID), "deepseek") {
+				migrated := c.ReasoningMapping.clone()
+				m.ReasoningMapping = &migrated
+			}
+		}
+		if err := m.ReasoningMapping.validate(); err != nil {
+			return err
+		}
 		if strings.TrimSpace(m.UpstreamID) == "" || strings.ContainsAny(m.ID+m.UpstreamID, "\r\n\t") {
 			return fail(400, "model identifiers must be nonempty and contain no control whitespace")
 		}
@@ -194,6 +236,7 @@ func (c *Config) validate() error {
 			m.Providers[n] = slug
 		}
 	}
+	c.ReasoningMapping = nil
 	return nil
 }
 
@@ -230,20 +273,21 @@ type Attempt struct {
 	Error               string `json:"error,omitempty"`
 }
 type LogEntry struct {
-	CompletedAt           *time.Time `json:"completed_at,omitempty"`
-	UpstreamAttempts      *int       `json:"upstream_attempt_count,omitempty"`
-	ReasoningEffort       string     `json:"reasoning_effort,omitempty"`
-	RequestCount          int64      `json:"request_count,omitempty"`
-	LastTime              *time.Time `json:"last_time,omitempty"`
-	LastRequestID         string     `json:"last_request_id,omitempty"`
-	BackoffWindowID       string     `json:"backoff_window_id,omitempty"`
-	OutputTokensPerSecond *float64   `json:"output_tokens_per_second"`
-	ErrorKind             string     `json:"error_kind,omitempty"`
-	UpstreamHTTPStatus    int        `json:"upstream_http_status,omitempty"`
-	UpstreamErrorStatus   int        `json:"upstream_error_status,omitempty"`
-	UpstreamSkipped       bool       `json:"upstream_skipped,omitempty"`
-	RetryAt               *time.Time `json:"retry_at,omitempty"`
-	RateLimitScope        string     `json:"rate_limit_scope,omitempty"`
+	ReasoningMapping      *ReasoningMappingLog `json:"reasoning_mapping,omitempty"`
+	CompletedAt           *time.Time           `json:"completed_at,omitempty"`
+	UpstreamAttempts      *int                 `json:"upstream_attempt_count,omitempty"`
+	ReasoningEffort       string               `json:"reasoning_effort,omitempty"`
+	RequestCount          int64                `json:"request_count,omitempty"`
+	LastTime              *time.Time           `json:"last_time,omitempty"`
+	LastRequestID         string               `json:"last_request_id,omitempty"`
+	BackoffWindowID       string               `json:"backoff_window_id,omitempty"`
+	OutputTokensPerSecond *float64             `json:"output_tokens_per_second"`
+	ErrorKind             string               `json:"error_kind,omitempty"`
+	UpstreamHTTPStatus    int                  `json:"upstream_http_status,omitempty"`
+	UpstreamErrorStatus   int                  `json:"upstream_error_status,omitempty"`
+	UpstreamSkipped       bool                 `json:"upstream_skipped,omitempty"`
+	RetryAt               *time.Time           `json:"retry_at,omitempty"`
+	RateLimitScope        string               `json:"rate_limit_scope,omitempty"`
 	promptReported        bool
 	completionReported    bool
 	estimateKey           string

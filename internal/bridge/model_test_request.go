@@ -59,7 +59,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 	}
 	in.ReasoningEffort = strings.ToLower(strings.TrimSpace(in.ReasoningEffort))
 	switch in.ReasoningEffort {
-	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "auto":
+	case "", "none", "minimal", "low", "medium", "high", "xhigh", "max":
 	default:
 		return managementJSON(400, map[string]any{"error": "无效的测试思考强度"})
 	}
@@ -102,6 +102,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		err = fail(409, "模型映射已变更，请刷新后重试")
 	}
 	entry := s.newLog(req, credential, upstream)
+	s.applyReasoningMapping(j, &entry)
 	attempt := Attempt{Mode: "model-test", Provider: "unknown", ProviderSource: "not_reported"}
 	diagnostics := &modelTestDiagnostics{limit: cfg.MaxResponseBytes}
 	// CPA's management callback supports only the global proxy, not auth-specific proxies.
@@ -153,7 +154,8 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		"ok": err == nil, "status": statusOf(err), "error": detail, "duration_ms": duration,
 		"ttft_ms": entry.TTFTMS, "model": in.Model, "upstream_id": upstream,
 		"credential_id": credential.ID, "credential_label": credential.Label,
-		"reasoning_effort": entry.ReasoningEffort,
-		"provider":         entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
+		"reasoning_effort":  entry.ReasoningEffort,
+		"reasoning_mapping": entry.ReasoningMapping,
+		"provider":          entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
 	})
 }

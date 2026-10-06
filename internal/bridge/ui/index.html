@@ -124,7 +124,7 @@
     .toolbar .dropdown { flex: 0 1 155px; }
     .count { margin-left: auto; color: var(--muted); white-space: nowrap; font-size: 12px; }
     .log-head { display: grid; grid-template-columns: var(--log-columns); gap: 8px; padding: 0 13px 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
-    #logsPanel { --log-columns: 138px minmax(230px, 1fr) 76px 116px 100px 130px 118px minmax(150px, .7fr) 16px; max-width: 1500px; margin-inline: auto; }
+    #logsPanel { --log-columns: 138px minmax(230px, 1fr) 124px 116px 100px 130px 118px minmax(150px, .7fr) 16px; max-width: 1500px; margin-inline: auto; }
     .log-list { display: grid; gap: 6px; }
     .log-entry { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
     .log-entry[open] { background: var(--inset-bg); box-shadow: inset 3px 0 var(--accent); }
@@ -168,6 +168,18 @@
     .empty strong { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
     .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
     .panel { min-width: 0; padding: 22px; border: 1px solid color-mix(in srgb, var(--line) 70%, var(--surface)); border-radius: 12px; background: var(--surface); }
+    .config-side { display: grid; gap: 24px; min-width: 0; }
+    .effort-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+    .effort-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; }
+    .effort-table th, .effort-table td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .effort-table th:last-child { width: 54px; }
+    .effort-table td:first-child { padding-right: 22px; position: relative; }
+    .effort-table td:first-child:not([colspan])::after { content: '→'; position: absolute; right: 5px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+    .effort-table td:last-child:not([colspan]) { text-align: right; }
+    .effort-table .effort-empty { color: var(--muted); text-align: center; padding: 20px 0; }
+    .effort-table .dropdown { width: 100%; }
+    .effort-switch { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+    .reasoning-badge { white-space: normal; overflow-wrap: anywhere; }
     .auth-panel { grid-column: 1 / -1; }
     .auth-panel .panel-hint { max-width: 880px; }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
@@ -453,9 +465,20 @@
       <div class="config-grid">
         <div class="panel">
           <div class="panel-head"><div><h2>模型映射</h2><p class="panel-hint">客户端名称与 Cline Pass 上游模型</p></div><div class="row-actions"><button class="button compact primary" id="openModel" type="button">添加模型</button></div></div>
-          <div class="model-test-tools"><label for="modelTestCredential">测试凭据</label><select class="control" id="modelTestCredential"><option value="">请先添加并启用凭据</option></select><label for="modelTestReasoning" title="此测试直接调用上游，不经过 CPA 的 payload 规则。所选值随请求发送，具体支持范围由模型决定。">测试思考强度</label><select class="control" id="modelTestReasoning" title="仅影响模型测试；未指定表示不发送思考强度，不代表关闭思考。"><option value="">未指定</option><option value="none">none</option><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option><option value="ultra">ultra</option><option value="auto">auto</option></select><p class="panel-hint">发送一条简短消息 · 结果仅代表所选账号 · 完整响应耗时：&lt;3 秒绿 / 3–10 秒黄 / ≥10 秒红</p></div>
+          <div class="model-test-tools"><label for="modelTestCredential">测试凭据</label><select class="control" id="modelTestCredential"><option value="">请先添加并启用凭据</option></select><label for="modelTestReasoning" title="此测试直接调用上游，不经过 CPA 的 payload 规则。所选值作为映射前的输入；启用插件思考强度映射后，以映射后的值发送。">测试思考强度</label><select class="control" id="modelTestReasoning" title="仅影响模型测试的输入；未指定时也会应用已保存的「未设置」映射，不代表关闭思考。"><option value="">未指定</option><option value="none">none</option><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select><p class="panel-hint">发送一条简短消息 · 结果仅代表所选账号 · 完整响应耗时：&lt;3 秒绿 / 3–10 秒黄 / ≥10 秒红</p></div>
           <div id="modelList" aria-live="polite"><div class="empty">正在读取模型…</div></div>
           <p class="inline-state" id="modelState"></p>
+        </div>
+        <div class="config-side">
+        <div class="panel">
+          <div class="panel-head"><div><h2>思考强度映射</h2><p class="panel-hint" title="按所选模型配置顶层 reasoning_effort，正式请求与管理页测试共用。未添加规则的强度直接透传。已有 thinking / reasoning 配置且未传 reasoning_effort 时，保留原策略。">请求传入 → 发往上游</p></div><a class="button compact" href="https://api-docs.deepseek.com/zh-cn/guides/thinking_mode" target="_blank" rel="noopener noreferrer">默认表依据 ↗</a></div>
+          <form class="form-stack" id="reasoningMappingForm">
+            <div class="field"><label for="reasoningMappingModel">模型</label><select class="control" id="reasoningMappingModel"><option value="">暂无模型</option></select></div>
+            <label class="effort-switch"><input id="reasoningMappingEnabled" type="checkbox">启用此模型的映射</label>
+            <table class="effort-table"><thead><tr><th scope="col">请求传入</th><th scope="col" title="选择「未设置」会移除 reasoning_effort 字段；模型默认强度由上游决定。">映射为</th><th scope="col">操作</th></tr></thead><tbody id="reasoningMappingRows"></tbody></table>
+            <div class="form-foot"><button class="button compact" id="addReasoningRule" type="button">添加规则</button><button class="button compact" id="resetReasoningMapping" type="button" title="DeepSeek 恢复默认表，其他模型恢复空表；保存后生效，保留当前开关。">恢复默认表</button><button class="button primary" id="saveReasoningMapping" type="submit">保存映射</button></div>
+          </form>
+          <p class="inline-state" id="reasoningMappingState" role="status"></p>
         </div>
         <div class="panel">
           <div class="panel-head"><div><h2>请求与日志设置</h2><p class="panel-hint">仅影响本插件</p></div><button class="button compact" id="openResetStatistics" type="button" aria-haspopup="dialog" aria-controls="resetStatisticsDialog">清空统计</button></div>
@@ -466,6 +489,7 @@
             <div class="form-foot"><button class="button primary" id="saveSettings" type="submit">保存设置</button></div>
           </form>
           <p class="inline-state" id="settingsState"></p>
+        </div>
         </div>
         <div class="panel auth-panel">
           <div class="panel-head"><div><h2>管理鉴权（兜底）</h2><p class="panel-hint">用于读取日志和修改插件配置。优先复用同源 CPA / CPAMP 保存的登录；鉴权失败时可输入当前管理入口的密钥。</p></div></div>
@@ -482,7 +506,8 @@
       <div class="field"><label for="authType">请求头</label><select class="control" id="authType"><option value="bearer">Authorization: Bearer</option><option value="x-management-key">X-Management-Key</option></select></div>
       <div class="field"><label for="authKey">管理密钥</label><input class="control" id="authKey" type="password" autocomplete="new-password" placeholder="当前入口的 CPA 或 CPAMP 管理密钥"></div>
       <label class="field-line"><input id="rememberAuth" type="checkbox">在此浏览器记住管理密钥</label>
-      <div class="dialog-actions"><button class="button danger" id="clearAuth" type="button">清除密钥</button><button class="button" id="closeAuth" type="button">取消</button><button class="button primary" type="submit">应用</button></div>
+      <p class="inline-state" id="authState" role="alert" hidden></p>
+      <div class="dialog-actions"><button class="button danger" id="clearAuth" type="button">清除密钥</button><button class="button" id="closeAuth" type="button">取消</button><button class="button primary" id="authSubmit" type="submit">验证并应用</button></div>
     </form>
   </dialog>
   <dialog id="modelDialog" aria-labelledby="modelFormTitle">
@@ -576,6 +601,9 @@
     const $ = (id) => document.getElementById(id);
     const state = { key: '', authType: 'bearer', page: 0, total: 0, logsController: null, providers: new Set(), models: [], editingModelIndex: -1, modelBusy: false, config: null, toastTimer: 0, modelCandidates: [], selectedCandidates: new Set(), candidateBusy: false, candidateSnapshot: [], fetchingModels: false, editingCredentialId: '', credentialBusy: false, providerProbes: new Map(), providerProbePending: new Map(), providerProbeBatch: false };
     const modelTestResults = new Map();
+    let reasoningMappingBusy = false;
+    let reasoningMappingRevision = 0;
+    const reasoningDrafts = new Map();
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
     const shown = (value, fallback = '未记录') => present(value) ? esc(value) : fallback;
@@ -613,6 +641,11 @@
       if (query) Object.entries(query).forEach(([key, value]) => { if (present(value)) url.searchParams.set(key, String(value)); });
       return url;
     };
+    const defaultReasoningRules = { unset: 'unset', none: 'none', minimal: 'low', low: 'low', medium: 'high', high: 'high', xhigh: 'high', max: 'max', ultra: 'max' };
+    const reasoningTargets = ['unset', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    const reasoningLabel = (value) => !value || value === 'unset' ? '未设置' : String(value);
+    const reasoningSources = Object.keys(defaultReasoningRules);
+    let reasoningRowSequence = 0;
     const dropdowns = new Map();
     function createDropdown(field, getItems, editable = false) {
       const wrapper = document.createElement('div');
@@ -697,7 +730,17 @@
         trigger.setAttribute('aria-expanded', String(isOpen()));
         if (!isOpen()) trigger.removeAttribute('aria-activedescendant');
       });
-      trigger.addEventListener('click', () => { if (isOpen() && !editable) close(); else open(); });
+      // Auto popovers light-dismiss before click. Capture the state at pointerdown
+      // so clicking the invoker again closes instead of immediately reopening.
+      let pointerWasOpen = false;
+      trigger.addEventListener('pointerdown', (event) => { if (event.button === 0) pointerWasOpen = isOpen(); });
+      trigger.addEventListener('pointercancel', () => { pointerWasOpen = false; });
+      trigger.addEventListener('click', (event) => {
+        if (trigger.disabled) return;
+        const shouldClose = event.detail > 0 ? pointerWasOpen : isOpen();
+        pointerWasOpen = false;
+        if (shouldClose) close(); else open();
+      });
       if (editable) trigger.addEventListener('input', () => open(true));
       field.addEventListener('change', sync);
       trigger.addEventListener('keydown', (event) => {
@@ -721,11 +764,17 @@
         }
       });
       window.addEventListener('resize', close);
-      window.addEventListener('scroll', (event) => { if (!menu.contains(event.target)) close(); }, true);
+      const onScroll = (event) => { if (!menu.contains(event.target)) close(); };
+      window.addEventListener('scroll', onScroll, true);
       const dialog = field.closest('dialog');
       if (dialog) dialog.addEventListener('close', close);
       sync();
-      return { sync };
+      return { sync, destroy() {
+        close(); clearTimeout(typeTimer);
+        window.removeEventListener('resize', close);
+        window.removeEventListener('scroll', onScroll, true);
+        if (dialog) dialog.removeEventListener('close', close);
+      } };
     }
     for (const field of document.querySelectorAll('select')) dropdowns.set(field.id, createDropdown(field, () => [...field.options].map((option) => ({ value: option.value, label: option.textContent }))));
     dropdowns.set('providerFilter', createDropdown($('providerFilter'), () => [{ value: '', label: '全部渠道' }, ...[...state.providers].sort((a, b) => a.localeCompare(b)).map((provider) => ({ value: provider, label: provider }))], true));
@@ -736,42 +785,114 @@
       state.toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3800);
     }
     function globalError(message) { $('globalError').textContent = message; $('globalError').hidden = !message; }
+    const authGate = { revision: 0, verified: null, flight: null, paused: null, banned: false, bannedUntil: 0, timer: null, submitting: false, retrySaved: false };
+    function authMessage() {
+      if (!authGate.banned) return authGate.paused?.message || '';
+      const seconds = Math.max(0, Math.ceil((authGate.bannedUntil - Date.now()) / 1000));
+      return seconds > 0
+        ? `来源 IP 已封锁，剩余 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒；到期后请手动验证。`
+        : (authGate.bannedUntil ? '封锁等待时间已结束，请手动验证管理密钥。' : authGate.paused.message);
+    }
+    function renderAuthState() {
+      const busy = !!authGate.flight || authGate.submitting;
+      const message = authMessage();
+      $('authState').textContent = message;
+      $('authState').hidden = !message;
+      $('authSubmit').disabled = busy || Date.now() < authGate.bannedUntil;
+      $('authSubmit').textContent = busy ? '正在验证…' : '验证并应用';
+      $('authKey').placeholder = authGate.retrySaved ? '留空以重新验证保留的密钥，或输入新密钥' : '当前入口的 CPA 或 CPAMP 管理密钥';
+      for (const id of ['authKey', 'authType', 'authTypeTrigger', 'rememberAuth']) $(id).disabled = busy;
+      if (authGate.timer && Date.now() >= authGate.bannedUntil) { clearInterval(authGate.timer); authGate.timer = null; }
+    }
+    function resetAuthGate() {
+      authGate.revision++;
+      authGate.verified = null;
+      authGate.paused = null;
+      authGate.retrySaved = false;
+      credentialView.queue.clear();
+    }
+    function pauseAuth(error, retrySaved = false) {
+      resetAuthGate();
+      authGate.paused = error;
+      authGate.retrySaved = retrySaved;
+      $('authButton').textContent = '管理密钥';
+      renderAuthState();
+      if (!$('authDialog').open) $('authDialog').showModal();
+    }
+    function banDeadline(response, detail) {
+      const retry = response.headers?.get('Retry-After');
+      if (retry && Number.isFinite(Number(retry))) return Date.now() + Math.max(0, Number(retry)) * 1000;
+      if (retry && Number.isFinite(Date.parse(retry))) return Date.parse(retry);
+      const duration = String(detail).match(/try again in\s+([\d.hms]+)/i)?.[1] || '';
+      const seconds = [...duration.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)].reduce((sum, [, value, unit]) => sum + Number(value) * ({ h: 3600, m: 60, s: 1, ms: 0.001 }[unit]), 0);
+      return seconds > 0 ? Date.now() + Math.ceil(seconds * 1000) : 0;
+    }
+    async function managementRequest(path, options, auth) {
+      options.signal?.throwIfAborted();
+      if (auth.revision !== authGate.revision || authGate.paused) throw authGate.paused || new Error('登录状态已变化，请重新加载');
+      const headers = { Accept: 'application/json', ...auth.headers };
+      if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+      const response = await fetch(apiUrl(path, options.query), { method: options.method || 'GET', headers, body: options.body === undefined ? undefined : JSON.stringify(options.body), credentials: 'same-origin', cache: 'no-store', signal: options.signal });
+      const raw = await response.text();
+      if (!response.ok) {
+        let detail = '';
+        try { const body = JSON.parse(raw); detail = body.error || body.message || raw; } catch { detail = raw; }
+        const error = new Error(`HTTP ${response.status}${detail ? `：${options.fullError ? String(detail) : String(detail).slice(0, 240)}` : ''}`);
+        // A ban is about the source IP, not proof that this key is wrong.
+        if (response.status === 403 && /IP banned/i.test(String(detail)) && auth.revision === authGate.revision) {
+          authGate.banned = true;
+          authGate.bannedUntil = Math.max(authGate.bannedUntil, banDeadline(response, detail));
+          pauseAuth(error, true);
+          if (authGate.bannedUntil > Date.now() && !authGate.timer) authGate.timer = setInterval(renderAuthState, 1000);
+        } else if ((response.status === 401 || response.status === 403) && auth.revision === authGate.revision) {
+          if (response.status === 401) {
+            window.PassBridgeClearAuth?.(auth.headers);
+            state.key = '';
+          }
+          pauseAuth(error, response.status === 403);
+        }
+        throw error;
+      }
+      if (auth.revision !== authGate.revision || authGate.paused) throw authGate.paused || new Error('登录状态已变化，请重新加载');
+      if (response.status === 204) return null;
+      return raw ? JSON.parse(raw) : null;
+    }
+    async function ensureManagementAuth() {
+      if (authGate.paused) throw new Error(authMessage());
+      if (authGate.verified) return { auth: authGate.verified };
+      if (authGate.flight) return authGate.flight;
+      const revision = authGate.revision;
+      // Install the shared promise before reading saved credentials (which may be async).
+      authGate.flight = Promise.resolve().then(async () => {
+        const manualKey = state.key, manualAuthType = state.authType, rememberAuth = state.rememberAuth === true;
+        const headers = manualKey
+          ? (manualAuthType === 'x-management-key' ? { 'X-Management-Key': manualKey } : { Authorization: `Bearer ${manualKey}` })
+          : { ...await window.PassBridgeAuthHeaders?.() };
+        if (revision !== authGate.revision || authGate.paused) throw authGate.paused || new Error('登录状态已变化，请重新验证');
+        if (!headers.Authorization && !headers['X-Management-Key']) {
+          const error = new Error('请输入当前管理入口的管理密钥');
+          pauseAuth(error);
+          throw error;
+        }
+        const auth = { headers, revision };
+        const status = await managementRequest('/status', { signal: AbortSignal.timeout(15000) }, auth);
+        if (revision !== authGate.revision || authGate.paused) throw authGate.paused || new Error('登录状态已变化，请重新验证');
+        authGate.verified = auth;
+        if (manualKey) window.PassBridgeSaveAuth?.(manualKey, manualAuthType, rememberAuth);
+        $('authButton').textContent = manualKey ? '密钥已验证' : '已复用管理密钥';
+        return { auth, status };
+      }).finally(() => { authGate.flight = null; renderAuthState(); });
+      renderAuthState();
+      return authGate.flight;
+    }
     async function api(path, options = {}) {
       if (!apiReady()) throw new Error('管理 API 路径尚未注入');
-      const headers = { Accept: 'application/json' };
-      const manualKey = state.key;
-      const manualAuthType = state.authType;
-      const rememberAuth = state.rememberAuth === true;
-      if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-      if (manualKey) headers[manualAuthType === 'x-management-key' ? 'X-Management-Key' : 'Authorization'] = manualAuthType === 'x-management-key' ? manualKey : `Bearer ${manualKey}`;
-      if (!manualKey && typeof window.PassBridgeAuthHeaders === 'function') {
-        const savedHeaders = await window.PassBridgeAuthHeaders();
-        Object.assign(headers, savedHeaders);
-        if (savedHeaders.Authorization || savedHeaders['X-Management-Key']) $('authButton').textContent = '已复用管理密钥';
-      }
-      const response = await fetch(apiUrl(path, options.query), { method: options.method || 'GET', headers, body: options.body === undefined ? undefined : JSON.stringify(options.body), credentials: 'same-origin', cache: 'no-store', signal: options.signal });
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          const currentHeaders = state.key
-            ? (state.authType === 'x-management-key' ? { 'X-Management-Key': state.key } : { Authorization: `Bearer ${state.key}` })
-            : (window.PassBridgeAuthHeaders?.() || {});
-          const authChanged = ['Authorization', 'X-Management-Key'].some(name => currentHeaders[name] !== headers[name]);
-          window.PassBridgeClearAuth?.(headers);
-          if (!authChanged) {
-            state.key = '';
-            $('authButton').textContent = '管理密钥';
-            if (!$('authDialog').open) $('authDialog').showModal();
-          }
-        }
-        let detail = '';
-        const raw = await response.text();
-        try { const body = JSON.parse(raw); detail = body.error || body.message || raw; } catch { detail = raw; }
-        throw new Error(`HTTP ${response.status}${detail ? `：${options.fullError ? String(detail) : String(detail).slice(0, 240)}` : ''}`);
-      }
-      if (manualKey && state.key === manualKey && state.authType === manualAuthType && (state.rememberAuth === true) === rememberAuth) window.PassBridgeSaveAuth?.(manualKey, manualAuthType, rememberAuth);
-      if (response.status === 204) return null;
-      const text = await response.text();
-      return text ? JSON.parse(text) : null;
+      options.signal?.throwIfAborted();
+      const result = await ensureManagementAuth();
+      options.signal?.throwIfAborted();
+      if (result.auth.revision !== authGate.revision || authGate.paused) throw authGate.paused || new Error('登录状态已变化，请重新加载');
+      if (path === '/status' && (!options.method || options.method === 'GET') && !options.query && Object.hasOwn(result, 'status')) return result.status;
+      return managementRequest(path, options, result.auth);
     }
     function formatTime(value) {
       if (!present(value)) return '--';
@@ -795,6 +916,10 @@
       return provider.toLowerCase() === 'unknown' ? '' : provider;
     }
     function datum(label, value, fallback = '未记录') { return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`; }
+    function reasoningText(log) {
+      const mapping = log.reasoning_mapping;
+      return mapping ? `${reasoningLabel(mapping.from)} → ${reasoningLabel(mapping.to)}` : log.reasoning_effort || '—';
+    }
     function logMarkup(log) {
       const status = statusInfo(log.status);
       const local = log.upstream_skipped === true;
@@ -818,7 +943,7 @@
       return `<details class="log-entry" data-id="${esc(log.id)}"><summary class="row-main">
         <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${local ? '首 ' : ''}${formatTime(log.time)}</div>${local ? `<div class="subtext mono">末 ${formatTime(lastTime)}</div>` : ''}</div>
         <div class="cell"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono">${shown(log.model)}</div><div class="subtext mono">${shown(log.upstream_model)}</div></div>
-        <div class="cell"><span class="cell-label">思考强度</span><span class="badge">${shown(log.reasoning_effort, '—')}</span></div>
+        <div class="cell"><span class="cell-label">思考强度</span><span class="badge reasoning-badge" title="${log.reasoning_mapping ? (local ? '映射已计算；本次被本地退避拦截，未发往上游' : '插件收到的强度 → 发往上游的强度') : '未应用插件映射；— 表示未识别到显式强度'}">${esc(reasoningText(log))}</span></div>
         <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div></div>
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
         <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
@@ -829,7 +954,7 @@
           <div class="detail-grid">
             ${datum('请求 ID', log.id, '—')}
             ${datum('最近请求 ID', log.last_request_id || log.id, '—')}
-            ${datum('思考强度', log.reasoning_effort, '—')}
+            ${datum(log.reasoning_mapping ? '思考强度（传入 → 发往上游）' : '思考强度', reasoningText(log))}
             ${datum('实际上游', actualProvider(log.provider, log.upstream_skipped), '未知')}
             ${datum('实际凭据', credential, '—')}
             ${datum('上游请求', `${number(upstreamAttempts)} 次`)}
@@ -1005,6 +1130,7 @@
       renderProviderOptions();
       renderModelRows();
       renderPinModelRows();
+      renderReasoningModels();
       if (state.editingModelIndex >= state.models.length) resetModelForm();
       if ($('modelCandidateDialog').open) renderCandidateList();
     }
@@ -1014,7 +1140,7 @@
       await loadStatus();
     }
     const modelKey = (model) => JSON.stringify([model.id, model.upstream_id]);
-    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning]);
+    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning, model.reasoning_mapping, reasoningMappingRevision]);
     function modelTestHTML(test) {
       if (!test) return '';
       if (test.pending) return '<div class="model-test-result"><span class="subtext" role="status">正在连接 Cline，等待完整响应…</span></div>';
@@ -1025,13 +1151,13 @@
       const error = String(test.error || '');
       const summary = error.split(/\r?\n/).find((line) => line.trim()) || '测试失败';
       const provider = test.upstream_skipped === true ? '未调用（本地退避）' : actualProvider(test.provider) || '未知';
-      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span class="model-test-provider truncate" title="实际上游：${esc(provider)}">实际上游 ${esc(provider)}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
+      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span class="model-test-provider truncate" title="实际上游：${esc(provider)}">实际上游 ${esc(provider)}</span><span>思考 ${esc(reasoningText(test))}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
     }
     function renderModelRows() {
       const credential = $('modelTestCredential').value;
       $('modelList').innerHTML = state.models.length ? state.models.map((model, index) => {
         const test = modelTestResults.get(modelTestKey(model));
-        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}${model.providers?.length ? ` · 固定: ${esc(model.providers.join(', '))}` : ''}</div></div><div class="row-actions"><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending ? 'disabled' : ''}>${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">删除</button></div>${modelTestHTML(test)}</div>`;
+        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}${model.providers?.length ? ` · 固定: ${esc(model.providers.join(', '))}` : ''}</div></div><div class="row-actions"><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending || reasoningMappingBusy ? 'disabled' : ''}>${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">删除</button></div>${modelTestHTML(test)}</div>`;
       }).join('') : '<div class="empty">暂无模型映射</div>';
     }
     const parseProviders = (value) => [...new Set(value.split(/[,\s]+/).filter(Boolean).map((provider) => provider.toLowerCase()))];
@@ -1161,6 +1287,7 @@
     $('modelTestCredential').addEventListener('change', renderModelRows);
     $('modelTestReasoning').addEventListener('change', renderModelRows);
     async function testMappedModel(model) {
+      if (reasoningMappingBusy) return;
       const credentialID = $('modelTestCredential').value;
       const reasoning = $('modelTestReasoning').value;
       const key = modelTestKey(model, credentialID, reasoning);
@@ -1393,7 +1520,7 @@
       $('refreshUsage').disabled = !credentialView.visible.some((item) => item.enabled !== false);
       refreshVisibleUsage();
     }
-    function usageViewVisible() { return !document.hidden && !$('configPanel').hidden; }
+    function usageViewVisible() { return !!authGate.verified && !authGate.paused && !document.hidden && !$('configPanel').hidden; }
     function queueUsage(id, force = false) {
       const item = credentialView.items.find((entry) => entry.id === id);
       if (!item || item.enabled === false || credentialView.pending.has(id)) return;
@@ -1520,20 +1647,37 @@
     $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.page = 0; loadLogs(); }, 280); });
     $('statusFilter').addEventListener('change', () => { state.page = 0; loadLogs(); });
     $('providerFilter').addEventListener('change', () => { state.page = 0; loadLogs(); });
-    $('authButton').addEventListener('click', () => $('authDialog').showModal());
+    $('authButton').addEventListener('click', () => { renderAuthState(); $('authDialog').showModal(); });
     $('closeAuth').addEventListener('click', () => $('authDialog').close());
-    $('clearAuth').addEventListener('click', () => { state.key = ''; state.rememberAuth = false; window.PassBridgeClearAuth?.(); $('authKey').value = ''; $('rememberAuth').checked = false; $('authDialog').close(); $('authButton').textContent = '管理密钥'; toast('插件手动保存的管理密钥已清除'); });
-    $('authForm').addEventListener('submit', (event) => {
+    $('clearAuth').addEventListener('click', () => { state.key = ''; state.rememberAuth = false; window.PassBridgeClearAuth?.(); $('authKey').value = ''; $('rememberAuth').checked = false; pauseAuth(new Error('插件手动保存的管理密钥已清除，请重新验证')); toast('插件手动保存的管理密钥已清除'); });
+    $('authForm').addEventListener('submit', async (event) => {
       event.preventDefault();
-      state.key = $('authKey').value.trim();
-      state.authType = $('authType').value;
-      state.rememberAuth = $('rememberAuth').checked;
-      $('authKey').value = '';
-      $('authButton').textContent = state.key ? '密钥已输入' : '管理密钥';
-      $('authDialog').close();
-      loadStatus().catch((error) => globalError(error.message));
-      loadStatistics();
-      if ($('logsPanel').hidden) loadConfig(); else loadLogs();
+      if (authGate.flight || authGate.submitting || Date.now() < authGate.bannedUntil) return;
+      const enteredKey = $('authKey').value.trim();
+      if (!enteredKey && !authGate.retrySaved) {
+        $('authState').textContent = '请输入管理密钥'; $('authState').hidden = false;
+        return;
+      }
+      resetAuthGate();
+      authGate.banned = false;
+      authGate.bannedUntil = 0;
+      if (enteredKey) {
+        state.key = enteredKey;
+        state.authType = $('authType').value;
+        state.rememberAuth = $('rememberAuth').checked;
+      }
+      authGate.submitting = true;
+      try {
+        await loadStatus();
+        $('authKey').value = '';
+        $('authDialog').close();
+        globalError('');
+        loadStatistics();
+        if ($('logsPanel').hidden) loadConfig(); else loadLogs();
+      } catch (error) {
+        if (!authGate.paused) pauseAuth(error);
+        globalError(error.message);
+      } finally { authGate.submitting = false; renderAuthState(); }
     });
     $('refreshModels').addEventListener('click', async () => {
       if (state.fetchingModels || state.modelBusy) return;
@@ -1669,6 +1813,7 @@
       const next = state.models.map((model) => ({ ...model }));
       const existing = state.models[state.editingModelIndex];
       const item = { ...existing, id, upstream_id, providers: existing ? [...existing.providers] : [] };
+      if (existing && existing.upstream_id !== upstream_id) delete item.reasoning_mapping;
       if (state.editingModelIndex < 0) next.push(item); else next[state.editingModelIndex] = item;
       state.modelBusy = true;
       $('saveModel').disabled = true;
@@ -1691,6 +1836,127 @@
         $('providerPolicyState').textContent = '上游策略已保存';
       } catch (error) { $('providerPolicyState').textContent = `保存失败：${error.message}`; }
       finally { $('saveProviderPolicy').disabled = false; }
+    });
+    function selectedReasoningModel() {
+      return state.models.find((model) => modelKey(model) === $('reasoningMappingModel').value);
+    }
+    function modelReasoningDefaults(model) {
+      return { enabled: false, rules: /deepseek/i.test(model?.upstream_id || '') ? { ...defaultReasoningRules } : {} };
+    }
+    function renderReasoningModels() {
+      const field = $('reasoningMappingModel');
+      const selected = field.value;
+      field.replaceChildren(...(state.models.length ? state.models.map((model) => new Option(model.id, modelKey(model))) : [new Option('暂无模型', '')]));
+      if (state.models.some((model) => modelKey(model) === selected)) field.value = selected;
+      dropdowns.get(field.id).sync();
+      for (const key of reasoningDrafts.keys()) if (!state.models.some((model) => modelKey(model) === key)) reasoningDrafts.delete(key);
+      showReasoningModel();
+    }
+    function renderReasoningMapping(mapping) {
+      $('reasoningMappingEnabled').checked = mapping?.enabled === true;
+      const body = $('reasoningMappingRows');
+      for (const field of body.querySelectorAll('select')) {
+        dropdowns.get(field.id)?.destroy();
+        dropdowns.delete(field.id);
+      }
+      const rows = mapping?.rows || Object.entries(mapping?.rules || {}).sort(([a], [b]) => reasoningSources.indexOf(a) - reasoningSources.indexOf(b));
+      body.innerHTML = rows.length ? rows.map(([from, to], index) => {
+        const id = ++reasoningRowSequence;
+        const select = (side, value, options) => `<select class="control effort-${side}" id="effort-${side}-${id}" aria-label="第 ${index + 1} 条${side === 'from' ? '请求强度' : '映射强度'}">${options.map((option) => `<option value="${option}" ${option === value ? 'selected' : ''}>${reasoningLabel(option)}</option>`).join('')}</select>`;
+        return `<tr data-effort-row><td>${select('from', from, reasoningSources)}</td><td>${select('to', to, reasoningTargets)}</td><td><button class="button compact danger remove-effort-rule" type="button" aria-label="删除第 ${index + 1} 条规则">删除</button></td></tr>`;
+      }).join('') : '<tr><td class="effort-empty" colspan="3">暂无规则，所有强度直接透传</td></tr>';
+      for (const field of body.querySelectorAll('select')) dropdowns.set(field.id, createDropdown(field, () => [...field.options].map((option) => ({ value: option.value, label: option.textContent }))));
+      syncReasoningControls();
+    }
+    function syncReasoningControls() {
+      const model = selectedReasoningModel();
+      for (const field of $('reasoningMappingForm').querySelectorAll('input, select, button')) field.disabled = reasoningMappingBusy || !model;
+      $('addReasoningRule').disabled ||= $('reasoningMappingRows').querySelectorAll('[data-effort-row]').length >= reasoningSources.length;
+    }
+    function showReasoningModel() {
+      const model = selectedReasoningModel();
+      const draft = model && reasoningDrafts.get(modelKey(model));
+      renderReasoningMapping(draft || model?.reasoning_mapping || modelReasoningDefaults(model));
+      $('reasoningMappingState').textContent = draft ? '此模型有未保存的修改' : '';
+    }
+    function readReasoningDraft() {
+      return { enabled: $('reasoningMappingEnabled').checked, rows: [...$('reasoningMappingRows').querySelectorAll('[data-effort-row]')].map((row) => [row.querySelector('.effort-from').value, row.querySelector('.effort-to').value]) };
+    }
+    function saveReasoningDraft() {
+      const model = selectedReasoningModel();
+      if (!model || reasoningMappingBusy) return;
+      reasoningDrafts.set(modelKey(model), readReasoningDraft());
+      $('reasoningMappingState').textContent = '此模型有未保存的修改';
+    }
+    function readReasoningMapping() {
+      const draft = readReasoningDraft();
+      const seen = new Set();
+      for (const [from] of draft.rows) {
+        if (seen.has(from)) throw new Error(`请求强度「${reasoningLabel(from)}」重复，请修改或删除重复规则`);
+        seen.add(from);
+      }
+      return { enabled: draft.enabled, rules: Object.fromEntries(draft.rows) };
+    }
+    $('addReasoningRule').addEventListener('click', () => {
+      if (reasoningMappingBusy || !selectedReasoningModel()) return;
+      const draft = readReasoningDraft();
+      const from = reasoningSources.find((value) => !draft.rows.some(([source]) => source === value));
+      if (!from) return;
+      draft.rows.push([from, reasoningTargets.includes(from) ? from : 'max']);
+      renderReasoningMapping(draft);
+      saveReasoningDraft();
+      $('reasoningMappingRows').querySelector('tr:last-child .dropdown-trigger')?.focus();
+    });
+    $('reasoningMappingRows').addEventListener('click', (event) => {
+      const button = event.target.closest('.remove-effort-rule');
+      if (!button || reasoningMappingBusy) return;
+      const rows = [...$('reasoningMappingRows').querySelectorAll('[data-effort-row]')];
+      const index = rows.indexOf(button.closest('tr'));
+      const draft = readReasoningDraft();
+      draft.rows.splice(index, 1);
+      renderReasoningMapping(draft);
+      saveReasoningDraft();
+    });
+    $('reasoningMappingModel').addEventListener('change', showReasoningModel);
+    $('resetReasoningMapping').addEventListener('click', () => {
+      const model = selectedReasoningModel();
+      if (!model || reasoningMappingBusy) return;
+      const mapping = modelReasoningDefaults(model);
+      mapping.enabled = $('reasoningMappingEnabled').checked;
+      reasoningDrafts.set(modelKey(model), mapping);
+      renderReasoningMapping(mapping);
+      $('reasoningMappingState').textContent = '已恢复此模型默认表，保存后生效';
+    });
+    $('reasoningMappingForm').addEventListener('change', (event) => {
+      if (event.target.id === 'reasoningMappingModel' || reasoningMappingBusy) return;
+      const model = selectedReasoningModel();
+      if (!model) return;
+      saveReasoningDraft();
+    });
+    $('reasoningMappingForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const model = selectedReasoningModel();
+      if (reasoningMappingBusy || !model) return;
+      let reasoning_mapping;
+      try { reasoning_mapping = readReasoningMapping(); }
+      catch (error) { $('reasoningMappingState').textContent = error.message; return; }
+      reasoningMappingBusy = true;
+      reasoningMappingRevision++;
+      modelTestResults.clear();
+      syncReasoningControls();
+      renderModelRows();
+      $('reasoningMappingState').textContent = '正在保存…';
+      try {
+        const saved = await api('/models/reasoning', { method: 'PUT', body: { model: model.id, upstream_id: model.upstream_id, reasoning_mapping } });
+        reasoningDrafts.delete(modelKey(model));
+        renderModels(saved);
+        $('reasoningMappingState').textContent = `${model.id} 的映射已保存${reasoning_mapping.enabled ? '并启用' : '，当前关闭'}`;
+      } catch (error) { $('reasoningMappingState').textContent = `保存失败：${error.message}`; }
+      finally {
+        reasoningMappingBusy = false;
+        syncReasoningControls();
+        renderModelRows();
+      }
     });
     $('settingsForm').addEventListener('submit', async (event) => {
       event.preventDefault();

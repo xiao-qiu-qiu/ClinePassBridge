@@ -27,7 +27,7 @@ func (s *Service) registerManagement(raw json.RawMessage) (any, error) {
 	for _, p := range []string{"models/refresh", "models/test", "models/providers", "credentials", "credentials/clear-affinity", "statistics/reset"} {
 		routes = append(routes, map[string]string{"Method": "POST", "Path": apiBase + "/" + p})
 	}
-	for _, p := range []string{"models", "config", "credentials"} {
+	for _, p := range []string{"models", "models/reasoning", "config", "credentials"} {
 		routes = append(routes, map[string]string{"Method": "PUT", "Path": apiBase + "/" + p})
 	}
 	routes = append(routes, map[string]string{"Method": "DELETE", "Path": apiBase + "/credentials"})
@@ -63,6 +63,10 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(404, map[string]any{"error": "not found"})
 	}
 	p := strings.TrimPrefix(r.Path, apiBase)
+	if r.Method == "PUT" && (p == "/config" || p == "/models" || p == "/models/reasoning") {
+		s.configMu.Lock()
+		defer s.configMu.Unlock()
+	}
 	switch r.Method + " " + p {
 	case "GET /status":
 		s.mu.RLock()
@@ -81,7 +85,7 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		cfg := s.config()
 		dataDir := cfg.DataDir
 		base := cfg.BaseURL
-		if e := json.Unmarshal(r.Body, &cfg); e != nil {
+		if e := decodeConfigJSON(r.Body, &cfg); e != nil {
 			return managementJSON(400, map[string]any{"error": "invalid config JSON"})
 		}
 		cfg.DataDir = dataDir
@@ -92,6 +96,30 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(200, cfg)
 	case "GET /models":
 		return managementJSON(200, map[string]any{"models": s.config().Models})
+	case "PUT /models/reasoning":
+		var in struct {
+			Model      string                  `json:"model"`
+			UpstreamID string                  `json:"upstream_id"`
+			Mapping    *ReasoningMappingConfig `json:"reasoning_mapping"`
+		}
+		if err := json.Unmarshal(r.Body, &in); err != nil || in.Mapping == nil {
+			return managementJSON(400, map[string]any{"error": "invalid model reasoning mapping"})
+		}
+		cfg := s.config()
+		for i := range cfg.Models {
+			if cfg.Models[i].ID != in.Model {
+				continue
+			}
+			if cfg.Models[i].UpstreamID != in.UpstreamID {
+				return managementJSON(409, map[string]any{"error": "模型已变更，请刷新后重试"})
+			}
+			cfg.Models[i].ReasoningMapping = in.Mapping
+			if err := s.saveConfig(cfg); err != nil {
+				return managementJSON(statusOf(err), map[string]any{"error": safeError(err)})
+			}
+			return managementJSON(200, map[string]any{"models": cfg.Models})
+		}
+		return managementJSON(404, map[string]any{"error": "模型不存在，请刷新后重试"})
 	case "PUT /models":
 		var in struct {
 			Models *[]Model `json:"models"`
@@ -171,7 +199,14 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 		if v.UpstreamSkipped {
 			label = localBackoffLabel
 		}
-		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.LastRequestID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error+" "+v.Credential+" "+v.ReasoningEffort+" "+v.ErrorKind+" "+label), search) {
+		reasoning := v.ReasoningEffort
+		if v.ReasoningMapping != nil {
+			reasoning += " " + v.ReasoningMapping.From + " " + v.ReasoningMapping.To
+			if v.ReasoningMapping.From == "unset" || v.ReasoningMapping.To == "unset" {
+				reasoning += " 未设置"
+			}
+		}
+		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.LastRequestID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error+" "+v.Credential+" "+reasoning+" "+v.ErrorKind+" "+label), search) {
 			continue
 		}
 		if provider != "" && provider != "all" && !matchesProvider(provider, v) {

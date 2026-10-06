@@ -13,6 +13,10 @@ func requestReasoningEffort(payload []byte) string {
 	if err != nil {
 		return ""
 	}
+	return objectReasoningEffort(j)
+}
+
+func objectReasoningEffort(j map[string]any) string {
 	for _, value := range []any{j["reasoning_effort"], object(j["reasoning"])["effort"], object(j["thinking"])["effort"]} {
 		v := strings.ToLower(strings.TrimSpace(str(value)))
 		switch v {
@@ -89,7 +93,7 @@ func backoffLogKey(e LogEntry) string {
 	if window == "" {
 		return ""
 	}
-	return string(jsonBytes([]any{window, e.CredentialID, e.UpstreamModel, e.Model, e.Stream, e.ReasoningEffort, e.ErrorKind, e.RateLimitScope, e.Status}))
+	return string(jsonBytes([]any{window, e.CredentialID, e.UpstreamModel, e.Model, e.Stream, e.ReasoningEffort, e.ReasoningMapping, e.ErrorKind, e.RateLimitScope, e.Status}))
 }
 
 func historicalCompletionTime(e LogEntry) time.Time {

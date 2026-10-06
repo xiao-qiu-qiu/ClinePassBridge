@@ -255,6 +255,7 @@ func (s *Service) execute(r ExecutorRequest) (any, error) {
 	r.deadline = time.Now().Add(time.Duration(s.config().TimeoutSeconds) * time.Second)
 	j, c, up, e := s.prepare(r)
 	entry := s.newLog(r, c, up)
+	s.applyReasoningMapping(j, &entry)
 	start := time.Now()
 	defer func() {
 		entry.DurationMS = time.Since(start).Milliseconds()
@@ -401,6 +402,7 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 	r.deadline = time.Now().Add(time.Duration(s.config().TimeoutSeconds) * time.Second)
 	j, c, up, e := s.prepare(r)
 	entry := s.newLog(r, c, up)
+	s.applyReasoningMapping(j, &entry)
 	start := time.Now()
 	var lease *rateLease
 	failEarly := func(err error) (any, error) {

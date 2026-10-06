@@ -18,6 +18,7 @@ import (
 var secretPattern = regexp.MustCompile(`(?i)(?:bearer\s+|sk[-_])[a-z0-9_.-]+`)
 
 type Service struct {
+	configMu             sync.Mutex // Serializes configuration read-modify-save transactions.
 	rateLimits           rateLimiter
 	credentialMu         sync.Mutex
 	authFiles            map[string]string
@@ -66,8 +67,16 @@ func (s *Service) config() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	c := s.cfg
+	if c.ReasoningMapping != nil {
+		mapping := c.ReasoningMapping.clone()
+		c.ReasoningMapping = &mapping
+	}
 	c.Models = append([]Model{}, c.Models...)
 	for i := range c.Models {
+		if c.Models[i].ReasoningMapping != nil {
+			mapping := c.Models[i].ReasoningMapping.clone()
+			c.Models[i].ReasoningMapping = &mapping
+		}
 		// JSON decoding and validation mutate these slices. A rejected update
 		// must not change live routing; keep nil distinct from an explicit [].
 		if c.Models[i].Providers != nil {
@@ -93,6 +102,8 @@ func atomicJSON(path string, v any) error {
 	return os.Rename(tmp, path)
 }
 func (s *Service) configure(raw json.RawMessage) error {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
 	var req struct {
 		ConfigYAML []byte `json:"config_yaml"`
 	}
@@ -107,7 +118,7 @@ func (s *Service) configure(raw json.RawMessage) error {
 	}
 	// CPA passes plugin-owned config. State holds UI changes and bounded request metadata, never API keys.
 	if b, e := os.ReadFile(filepath.Join(cfg.DataDir, "settings.json")); e == nil {
-		if e = json.Unmarshal(b, &cfg); e != nil {
+		if e = decodeConfigJSON(b, &cfg); e != nil {
 			return e
 		}
 	}

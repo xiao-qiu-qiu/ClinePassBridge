@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -22,9 +23,14 @@ func callModelTest(t *testing.T, s *Service) ManagementResponse {
 
 func callModelTestWithReasoning(t *testing.T, s *Service, effort string) ManagementResponse {
 	t.Helper()
+	return callModelTestForModel(t, s, "deepseek-flash", "cline-pass/deepseek-v4.1-flash", effort)
+}
+
+func callModelTestForModel(t *testing.T, s *Service, model, upstream, effort string) ManagementResponse {
+	t.Helper()
 	result, err := s.Handle("management.handle", jsonBytes(ManagementRequest{
 		Method: "POST", Path: apiBase + "/models/test", HostCallbackID: "probe-callback",
-		Body: jsonBytes(map[string]any{"model": "deepseek-flash", "upstream_id": "cline-pass/deepseek-v4.1-flash", "credential_id": "probe-account", "reasoning_effort": effort}),
+		Body: jsonBytes(map[string]any{"model": model, "upstream_id": upstream, "credential_id": "probe-account", "reasoning_effort": effort}),
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -33,11 +39,34 @@ func callModelTestWithReasoning(t *testing.T, s *Service, effort string) Managem
 }
 
 func TestModelProbeReasoningReachesUpstreamAndLog(t *testing.T) {
-	for _, effort := range []string{"", "max", " HIGH ", "none"} {
-		t.Run("effort="+effort, func(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		effort  string
+		want    string
+		enabled bool
+		rules   map[string]string
+		mapping *ReasoningMappingLog
+	}{
+		{name: "disabled-unset"},
+		{name: "disabled-max", effort: "max", want: "max"},
+		{name: "disabled-normalized-high", effort: " HIGH ", want: "high", rules: map[string]string{"high": "max"}},
+		{name: "disabled-none", effort: "none", want: "none"},
+		{name: "enabled-medium", effort: "medium", want: "high", enabled: true, mapping: &ReasoningMappingLog{"medium", "high"}},
+		{name: "enabled-xhigh", effort: "xhigh", want: "high", enabled: true, mapping: &ReasoningMappingLog{"xhigh", "high"}},
+		{name: "enabled-minimal", effort: "minimal", want: "low", enabled: true, mapping: &ReasoningMappingLog{"minimal", "low"}},
+		{name: "enabled-identity", effort: " HIGH ", want: "high", enabled: true, mapping: &ReasoningMappingLog{"high", "high"}},
+		{name: "enabled-unset-identity", enabled: true, mapping: &ReasoningMappingLog{"unset", "unset"}},
+		{name: "custom-unset-injection", want: "minimal", enabled: true, rules: map[string]string{"unset": "minimal"}, mapping: &ReasoningMappingLog{"unset", "minimal"}},
+		{name: "custom-unset-deletion", effort: "low", enabled: true, rules: map[string]string{"low": "unset"}, mapping: &ReasoningMappingLog{"low", "unset"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			s := probeService(t)
+			t.Cleanup(func() { observabilityShutdown(t, s) })
+			s.cfg.Models[0].ReasoningMapping.Enabled = tc.enabled
+			for from, to := range tc.rules {
+				s.cfg.Models[0].ReasoningMapping.Rules[from] = to
+			}
 			h := newFakeHost(ssePlan(simpleSSE()))
-			want := strings.ToLower(strings.TrimSpace(effort))
 			s.SetHost(func(method string, payload, out any) error {
 				if method == "host.http.do_stream" {
 					body, err := decodeObject(payload.(map[string]any)["body"].([]byte))
@@ -45,31 +74,93 @@ func TestModelProbeReasoningReachesUpstreamAndLog(t *testing.T) {
 						return err
 					}
 					value, present := body["reasoning_effort"]
-					if str(value) != want || present != (want != "") {
-						t.Errorf("upstream reasoning = %v (present %v), want %q", value, present, want)
+					if str(value) != tc.want || present != (tc.want != "") {
+						t.Errorf("upstream reasoning = %v (present %v), want %q", value, present, tc.want)
 					}
 				}
 				return h.call(method, payload, out)
 			})
-			r := callModelTestWithReasoning(t, s, effort)
-			result, err := decodeObject(r.Body)
-			if err != nil || r.StatusCode != 200 || result["ok"] != true || result["reasoning_effort"] != want {
+			r := callModelTestWithReasoning(t, s, tc.effort)
+			var result struct {
+				OK               bool                 `json:"ok"`
+				ReasoningEffort  string               `json:"reasoning_effort"`
+				ReasoningMapping *ReasoningMappingLog `json:"reasoning_mapping"`
+			}
+			err := json.Unmarshal(r.Body, &result)
+			if err != nil || r.StatusCode != 200 || !result.OK || result.ReasoningEffort != tc.want || !reflect.DeepEqual(result.ReasoningMapping, tc.mapping) {
 				t.Fatalf("probe response: %s; error: %v", r.Body, err)
 			}
-			if len(h.opened) != 1 || len(s.logs) != 1 || s.logs[0].ReasoningEffort != want {
+			if len(h.opened) != 1 || len(s.logs) != 1 || s.logs[0].ReasoningEffort != tc.want || !reflect.DeepEqual(s.logs[0].ReasoningMapping, tc.mapping) {
 				t.Fatalf("reasoning log or upstream request missing: %+v", s.logs)
 			}
 		})
 	}
 }
 
-func TestModelProbeRejectsInvalidReasoningBeforeUpstream(t *testing.T) {
+func TestModelProbeReasoningAliasesIndependent(t *testing.T) {
 	s := probeService(t)
-	h := newFakeHost()
-	s.SetHost(h.call)
-	r := callModelTestWithReasoning(t, s, "unsupported")
-	if r.StatusCode != 400 || len(h.opened) != 0 || len(s.logs) != 0 {
-		t.Fatalf("invalid effort must be rejected before a probe: status=%d, requests=%d, logs=%d", r.StatusCode, len(h.opened), len(s.logs))
+	s.cfg.Models[0].ReasoningMapping.Enabled = true
+	const upstream = "cline-pass/deepseek-v4.1-flash"
+	s.cfg.Models = append(s.cfg.Models, Model{
+		ID: "flash-second", UpstreamID: upstream, Providers: []string{"deepseek"},
+		ReasoningMapping: &ReasoningMappingConfig{Enabled: true, Rules: map[string]string{"medium": "max"}},
+	})
+	h, bodies := reasoningMappingHost(t, s, ssePlan(simpleSSE()), ssePlan(simpleSSE()), ssePlan(simpleSSE()))
+	for _, tc := range []struct{ alias, want string }{
+		{"deepseek-flash", "high"}, {"flash-second", "max"}, {"deepseek-flash", "high"},
+	} {
+		r := callModelTestForModel(t, s, tc.alias, upstream, "medium")
+		var result struct {
+			OK               bool                 `json:"ok"`
+			Model            string               `json:"model"`
+			UpstreamID       string               `json:"upstream_id"`
+			ReasoningEffort  string               `json:"reasoning_effort"`
+			ReasoningMapping *ReasoningMappingLog `json:"reasoning_mapping"`
+		}
+		if err := json.Unmarshal(r.Body, &result); err != nil {
+			t.Fatal(err)
+		}
+		wantMapping := &ReasoningMappingLog{From: "medium", To: tc.want}
+		if r.StatusCode != 200 || !result.OK || result.Model != tc.alias || result.UpstreamID != upstream || result.ReasoningEffort != tc.want || !reflect.DeepEqual(result.ReasoningMapping, wantMapping) {
+			t.Fatalf("%s probe response = %s", tc.alias, r.Body)
+		}
+		if len(bodies) != 1 {
+			t.Fatalf("%s outbound requests = %d, want 1", tc.alias, len(bodies))
+		}
+		body := <-bodies
+		if body["model"] != upstream || body["reasoning_effort"] != tc.want || body["stream"] != true {
+			t.Errorf("%s outbound body = %s, want reasoning_effort=%s", tc.alias, jsonBytes(body), tc.want)
+		}
+	}
+	if len(h.opened) != 3 || len(s.logs) != 3 {
+		t.Fatalf("alias probe requests/logs = %d/%d, want 3/3", len(h.opened), len(s.logs))
+	}
+	counts := map[string]int{}
+	for _, entry := range s.logs {
+		want := map[string]string{"deepseek-flash": "high", "flash-second": "max"}[entry.Model]
+		if want == "" || entry.Status != 200 || entry.UpstreamModel != upstream || entry.ReasoningEffort != want || !reflect.DeepEqual(entry.ReasoningMapping, &ReasoningMappingLog{From: "medium", To: want}) {
+			t.Errorf("alias probe log = %+v", entry)
+		}
+		counts[entry.Model]++
+	}
+	if counts["deepseek-flash"] != 2 || counts["flash-second"] != 1 {
+		t.Errorf("alias probe log counts = %v", counts)
+	}
+}
+
+func TestModelProbeRejectsInvalidReasoningBeforeUpstream(t *testing.T) {
+	for _, effort := range []string{"unsupported", "ultra", "auto"} {
+		t.Run(effort, func(t *testing.T) {
+			s := probeService(t)
+			// Mapping ultra -> max must not make ultra a valid model-test input.
+			s.cfg.Models[0].ReasoningMapping.Enabled = true
+			h := newFakeHost()
+			s.SetHost(h.call)
+			r := callModelTestWithReasoning(t, s, effort)
+			if r.StatusCode != 400 || len(h.opened) != 0 || len(s.logs) != 0 {
+				t.Fatalf("invalid effort must be rejected before a probe: status=%d, requests=%d, logs=%d", r.StatusCode, len(h.opened), len(s.logs))
+			}
+		})
 	}
 }
 

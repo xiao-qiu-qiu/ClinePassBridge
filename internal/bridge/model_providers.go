@@ -71,6 +71,7 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 		delete(j, "providerOptions")
 	}
 	entry := s.newLog(req, credential, upstream)
+	s.applyReasoningMapping(j, &entry)
 	attempt := Attempt{Mode: "provider-probe", Provider: "unknown", ProviderSource: "not_reported"}
 	diagnostics := &modelTestDiagnostics{limit: cfg.MaxResponseBytes}
 	var lease *rateLease
