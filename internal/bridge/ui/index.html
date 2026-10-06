@@ -596,7 +596,7 @@
   <script>
     /*__CPA_AUTH_COMPAT__*/
     'use strict';
-    const API_BASE = '__PASSBRIDGE_API_BASE__';
+    const API_BASE = document.querySelector('meta[name="cpa-api-base"]').content;
     const PAGE_SIZE = 50;
     const $ = (id) => document.getElementById(id);
     const state = { key: '', authType: 'bearer', page: 0, total: 0, logsController: null, providers: new Set(), models: [], editingModelIndex: -1, modelBusy: false, config: null, toastTimer: 0, modelCandidates: [], selectedCandidates: new Set(), candidateBusy: false, candidateSnapshot: [], fetchingModels: false, editingCredentialId: '', credentialBusy: false, providerProbes: new Map(), providerProbePending: new Map(), providerProbeBatch: false };

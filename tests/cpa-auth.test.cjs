@@ -21,7 +21,7 @@ function encrypted(login, version = 'v1') {
   return `enc::${version}::` + Buffer.from(bytes.map((byte, i) => byte ^ mask[i % mask.length])).toString('base64');
 }
 
-function loadAuth({ login = savedLogin(), apiBase = '/v0/management/clinepassbridge', encoded = true, version = 'v1', userAgent: currentUserAgent = userAgent, loggedIn = 'true', session = new Map(), persistent = new Map(), blocked = false } = {}) {
+function loadAuth({ login = savedLogin(), apiBase = '/v0/management/clinepassbridge', consoleURL = origin + apiBase.replace(/\/v(?:0|8)\/management\/clinepassbridge\/?$/, '/v0/resource/plugins/clinepassbridge/console'), encoded = true, version = 'v1', userAgent: currentUserAgent = userAgent, loggedIn = 'true', session = new Map(), persistent = new Map(), blocked = false } = {}) {
   for (const [name, value] of [['isLoggedIn', loggedIn], ['cli-proxy-auth', encoded ? encrypted(login, version) : JSON.stringify(login)]]) {
     if (value !== null && !persistent.has(name)) persistent.set(name, value);
   }
@@ -30,10 +30,11 @@ function loadAuth({ login = savedLogin(), apiBase = '/v0/management/clinepassbri
     setItem: (name, value) => persistent.set(name, value),
     removeItem: name => persistent.delete(name),
   };
+  const apiMeta = { content: apiBase };
   const context = vm.createContext({
-    location: new URL(origin + '/v0/resource/plugins/clinepassbridge/console'),
+    location: new URL(consoleURL),
     navigator: { userAgent: currentUserAgent },
-    document: { querySelector: () => ({ content: apiBase }) },
+    document: { querySelector: () => apiMeta },
     localStorage: storage,
     sessionStorage: {
       getItem: name => { if (blocked) throw new Error('storage blocked'); return session.get(name) ?? null; },
@@ -187,6 +188,14 @@ function pageAPI(options) {
       return elements.get(name);
     },
   });
+  if (options?.realURLs) {
+    const base = html.match(/^    const API_BASE = .+;$/m);
+    const urlStart = html.indexOf('    const apiReady =');
+    const urlEnd = html.indexOf('    const defaultReasoningRules =', urlStart);
+    assert.ok(base && urlStart >= 0 && urlEnd > urlStart);
+    context.present = value => value !== null && value !== undefined && String(value).trim() !== '';
+    vm.runInContext(base[0] + '\n' + html.slice(urlStart, urlEnd), context);
+  }
   const start = html.indexOf('    const authGate =');
   const end = html.indexOf('    function formatTime(', start);
   assert.ok(start >= 0 && end > start);
@@ -321,6 +330,57 @@ function enterKey(context, value = key, type = 'bearer') {
   context.$('authKey').value = value;
   context.$('authType').value = type;
 }
+
+test('real API requests and remembered panel logins follow the public console prefix', async () => {
+  for (const prefix of ['', '/proxy', '/team/cpa', '/api/cpa', '/team/api/cpa', '/%E7%AE%A1%E7%90%86']) {
+    for (const version of ['v0', 'v8']) {
+      const base = `${prefix}/${version}/management/clinepassbridge`;
+      const context = pageAPI({
+        realURLs: true, login: savedLogin(origin + prefix),
+        apiBase: `/${version}/management/clinepassbridge`,
+        consoleURL: `${origin}${prefix}/v0/resource/plugins/clinepassbridge/console/?view=logs#details`,
+      });
+      const calls = [];
+      context.fetch = async (url, request) => {
+        calls.push({ url: url.href, method: request.method });
+        assert.equal(request.headers.Authorization, `Bearer ${key}`);
+        return reply();
+      };
+      await context.api('/status');
+      await context.api('/logs', { query: { page: 2, provider: 'a/b' } });
+      await context.api('/config', { method: 'PUT', body: { request_timeout_seconds: 600 } });
+      assert.deepEqual(calls, [
+        { url: `${origin}${base}/status`, method: 'GET' },
+        { url: `${origin}${base}/logs?page=2&provider=a%2Fb`, method: 'GET' },
+        { url: `${origin}${base}/config`, method: 'PUT' },
+      ]);
+    }
+  }
+});
+
+test('public console prefixes isolate manual credentials from root and sibling deployments', async () => {
+  const session = new Map(), persistent = new Map();
+  const options = { ...noLogin, session, persistent, consoleURL: `${origin}/team/cpa/v0/resource/plugins/clinepassbridge/console` };
+  loadAuth(options).PassBridgeSaveAuth(key, 'bearer', true);
+  assert.deepEqual(await headers({ ...options, session: new Map() }), { Authorization: `Bearer ${key}` });
+  for (const prefix of ['', '/other', '/team/other']) {
+    assert.deepEqual(await headers({ ...options, consoleURL: `${origin}${prefix}/v0/resource/plugins/clinepassbridge/console` }), {});
+    assert.deepEqual(await headers({ login: savedLogin(origin + prefix), consoleURL: options.consoleURL }), {});
+  }
+});
+
+test('already rewritten proxy bases are not duplicated and custom console routes keep the injected base', async () => {
+  for (const route of ['/api/cpa/v0/resource/plugins/clinepassbridge/console', '/api/cpa/v8/resource/plugins/clinepassbridge/console', '/custom-console']) {
+    const context = pageAPI({
+      realURLs: true, login: savedLogin(origin + '/api/cpa'),
+      apiBase: '/api/cpa/v0/management/clinepassbridge', consoleURL: origin + route,
+    });
+    const calls = [];
+    context.fetch = async url => { calls.push(url.href); return reply(); };
+    await context.api('/status');
+    assert.deepEqual(calls, [origin + '/api/cpa/v0/management/clinepassbridge/status']);
+  }
+});
 
 test('missing keys send zero requests at startup, on refresh, and on empty submission', async () => {
   const context = pageAPI(noLogin);

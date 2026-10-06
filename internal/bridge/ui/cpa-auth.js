@@ -4,8 +4,17 @@
  */
 (() => {
   'use strict';
+  // A reverse proxy may strip its public prefix before CPA renders the page.
+  // Resolve it once from the console URL for both API requests and saved logins.
+  const apiMeta = document.querySelector('meta[name="cpa-api-base"]');
+  const consolePath = location.pathname.match(/^(.*)\/v(?:0|8)\/resource\/plugins\/clinepassbridge\/console\/?$/);
+  const configured = new URL(apiMeta.content, location.origin);
+  const apiPath = configured.pathname.match(/\/v(?:0|8)\/management\/clinepassbridge\/?$/);
+  if (consolePath && apiPath && configured.origin === location.origin && !configured.username && !configured.password && !configured.search && !configured.hash) {
+    apiMeta.content = consolePath[1] + apiPath[0];
+  }
   function endpoint() {
-    const own = new URL(document.querySelector('meta[name="cpa-api-base"]').content, location.origin);
+    const own = new URL(apiMeta.content, location.origin);
     if (own.origin !== location.origin || own.username || own.password || own.search || own.hash || !/\/v(?:0|8)\/management\/clinepassbridge\/?$/.test(own.pathname)) return null;
     return { origin: own.origin, root: own.pathname.replace(/\/v(?:0|8)\/management\/clinepassbridge\/?$/, '') };
   }
