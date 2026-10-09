@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="white">
 <head>
   <meta charset="utf-8">
   <script>
     // Resolve CPA's theme before styles or page content can paint.
     (() => {
       function applyTheme(value) {
-        document.documentElement.dataset.theme = value === 'dark' || value === 'white' ? value : 'light';
+        document.documentElement.dataset.theme = value === 'dark' || value === 'light' ? value : 'white';
       }
       function syncTheme() {
         try {
           if (window.parent !== window) {
             document.documentElement.classList.add('embedded');
-            applyTheme(window.parent.document.documentElement.getAttribute('data-theme'));
+            applyTheme(window.parent.document.documentElement.getAttribute('data-theme') || 'light');
             return true;
           }
         } catch { if (window.parent !== window) document.documentElement.classList.add('embedded'); }
@@ -189,6 +189,8 @@
     #pinPanel { display: grid; gap: 24px; }
     .pin-semantics { margin: 10px 0 0; padding-left: 20px; }
     .pin-editor { flex-basis: 100%; }
+    .pin-model-test { flex-basis: 100%; min-width: 0; }
+    .pin-model-test:empty { display: none; }
     .provider-chips { display: flex; flex-wrap: wrap; gap: 5px; }
     .model-test-tools { margin: 0 0 14px; display: grid; gap: 6px; }
     .model-test-tools label { font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -437,6 +439,7 @@
         <div class="panel-head"><div><h2>模型上游白名单</h2><p class="panel-hint">使用逗号或空格分隔，也可点击探测到的渠道追加；留空恢复自动路由。可选上游需逐模型探测，结果取决于所用凭据；被分流到私有池的凭据不会返回候选。</p></div></div>
         <div class="field-line">
           <div class="field"><label for="pinProbeCredential">探测凭据</label><select class="control" id="pinProbeCredential" aria-describedby="pinProbeHint"><option value="">请先添加并启用凭据</option></select></div>
+          <div class="field"><label for="pinTestReasoning">测试思考强度</label><select class="control" id="pinTestReasoning" title="仅影响模型测试；使用已保存的思考强度映射，不经过 CPA 的 payload 规则。"><option value="">未指定</option><option value="none">none</option><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="xhigh">xhigh</option><option value="max">max</option></select></div>
           <button class="button compact" id="probeAllModels" type="button" disabled>探测全部模型</button>
         </div>
         <p class="subtext" id="pinProbeHint">批量探测按顺序使用开始时选中的凭据；结果仅保留在当前页面，不会自动修改白名单。</p>
@@ -1140,7 +1143,7 @@
       await loadStatus();
     }
     const modelKey = (model) => JSON.stringify([model.id, model.upstream_id]);
-    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning, model.reasoning_mapping, reasoningMappingRevision]);
+    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning, model.providers, state.config?.provider_policy, model.reasoning_mapping, reasoningMappingRevision]);
     function modelTestHTML(test) {
       if (!test) return '';
       if (test.pending) return '<div class="model-test-result"><span class="subtext" role="status">正在连接 Cline，等待完整响应…</span></div>';
@@ -1159,6 +1162,20 @@
         const test = modelTestResults.get(modelTestKey(model));
         return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}${model.providers?.length ? ` · 固定: ${esc(model.providers.join(', '))}` : ''}</div></div><div class="row-actions"><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending || reasoningMappingBusy ? 'disabled' : ''}>${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">删除</button></div>${modelTestHTML(test)}</div>`;
       }).join('') : '<div class="empty">暂无模型映射</div>';
+      syncPinModelTests();
+    }
+    function syncPinModelTests() {
+      const credential = $('pinProbeCredential').value;
+      const reasoning = $('pinTestReasoning').value;
+      for (const button of $('pinModelList').querySelectorAll('.pin-test-model')) {
+        const model = state.models[Number(button.dataset.index)];
+        if (!model) continue;
+        const test = modelTestResults.get(modelTestKey(model, credential, reasoning));
+        button.disabled = !credential || test?.pending || reasoningMappingBusy || state.modelBusy;
+        button.textContent = test?.pending ? '测试中…' : '测试模型';
+        button.setAttribute('aria-busy', String(!!test?.pending));
+        $(`pinModelTest-${button.dataset.index}`).innerHTML = modelTestHTML(test);
+      }
     }
     const parseProviders = (value) => [...new Set(value.split(/[,\s]+/).filter(Boolean).map((provider) => provider.toLowerCase()))];
     function providerProbeHTML(model) {
@@ -1188,9 +1205,10 @@
       syncProviderProbeControls();
     }
     function renderPinModelRows() {
-      $('pinModelList').innerHTML = state.models.length ? state.models.map((model, index) => `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><span class="badge ${model.providers.length ? 'good' : ''}">${model.providers.length ? '已固定' : '自动路由'}</span><button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 可钉上游`)}" aria-controls="pinProbeResult-${esc(index)}">探测可钉上游</button><div class="field pin-editor"><label for="pinProviders-${esc(index)}">上游 provider 允许列表</label><input class="control mono" id="pinProviders-${esc(index)}" data-index="${esc(index)}" value="${esc(model.providers.join(', '))}" autocomplete="off" aria-describedby="pinSemantics"><div id="pinProbeResult-${esc(index)}" role="status" aria-live="polite">${providerProbeHTML(model)}</div></div></div>`).join('') : '<div class="empty"><strong>暂无模型映射</strong>请前往配置概览添加模型映射。</div>';
+      $('pinModelList').innerHTML = state.models.length ? state.models.map((model, index) => `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><span class="badge ${model.providers.length ? 'good' : ''}">${model.providers.length ? '已固定' : '自动路由'}</span><div class="row-actions"><button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 可钉上游`)}" aria-controls="pinProbeResult-${esc(index)}">探测可钉上游</button><button class="button compact pin-test-model" type="button" data-index="${index}" aria-label="${esc(`测试 ${model.id}`)}" aria-controls="pinModelTest-${index}" title="使用当前所选凭据和已保存的上游白名单发送一条简短消息">测试模型</button></div><div class="field pin-editor"><label for="pinProviders-${esc(index)}">上游 provider 允许列表</label><input class="control mono" id="pinProviders-${esc(index)}" data-index="${esc(index)}" value="${esc(model.providers.join(', '))}" autocomplete="off" aria-describedby="pinSemantics"><div id="pinProbeResult-${esc(index)}" role="status" aria-live="polite">${providerProbeHTML(model)}</div></div><div class="pin-model-test" id="pinModelTest-${index}" role="status" aria-live="polite"></div></div>`).join('') : '<div class="empty"><strong>暂无模型映射</strong>请前往配置概览添加模型映射。</div>';
       $('savePinModels').disabled = !state.models.length || state.modelBusy;
       syncProviderProbeControls();
+      syncPinModelTests();
     }
     async function probeModelProviders(model, credentialID = $('pinProbeCredential').value) {
       if (!credentialID) return;
@@ -1235,8 +1253,23 @@
         syncProviderProbeControls();
       }
     });
-    $('pinProbeCredential').addEventListener('change', syncProviderProbeControls);
+    $('pinProbeCredential').addEventListener('change', () => { syncProviderProbeControls(); syncPinModelTests(); });
+    $('pinTestReasoning').addEventListener('change', syncPinModelTests);
     $('pinModelList').addEventListener('click', (event) => {
+      const test = event.target.closest('.pin-test-model');
+      if (test) {
+        if (test.disabled || state.modelBusy) return;
+        const index = Number(test.dataset.index);
+        const model = state.models[index];
+        if (!model) return;
+        if (JSON.stringify(parseProviders($(`pinProviders-${index}`).value)) !== JSON.stringify(model.providers)) {
+          $('pinModelsState').textContent = '请先保存上游白名单，再测试模型';
+          $(`pinProviders-${index}`).focus();
+          return;
+        }
+        testMappedModel(model, $('pinProbeCredential').value, $('pinTestReasoning').value);
+        return;
+      }
       const probe = event.target.closest('.probe-providers');
       if (probe) {
         if (probe.disabled || state.modelBusy || state.providerProbeBatch) return;
@@ -1270,6 +1303,7 @@
         $('savePinModels').disabled = !state.models.length;
         for (const control of $('pinModelList').querySelectorAll('input, button')) control.disabled = false;
         syncProviderProbeControls();
+        syncPinModelTests();
       }
     });
     function syncModelTestCredentials() {
@@ -1286,10 +1320,8 @@
     }
     $('modelTestCredential').addEventListener('change', renderModelRows);
     $('modelTestReasoning').addEventListener('change', renderModelRows);
-    async function testMappedModel(model) {
+    async function testMappedModel(model, credentialID = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) {
       if (reasoningMappingBusy) return;
-      const credentialID = $('modelTestCredential').value;
-      const reasoning = $('modelTestReasoning').value;
       const key = modelTestKey(model, credentialID, reasoning);
       if (!credentialID || modelTestResults.get(key)?.pending) return;
       modelTestResults.set(key, { pending: true });

@@ -7,7 +7,7 @@
       "logo": "https://raw.githubusercontent.com/xiao-qiu-qiu/ClinePassBridge/main/logo.png",
       "description": "让 Cline Pass 订阅无缝接入 CPA，支持一键获取模型与手动映射、按模型固定上游 provider，规避原生非流式空响应错误，轻松查看实际命中的上游。 / Seamlessly connect Cline Pass subscriptions to CPA, fetch models in one click or map them manually, pin upstream providers per model, avoid native non-streaming empty-response errors, and see the actual upstream provider.",
       "author": "xiao-qiu-qiu",
-      "version": "0.2.14",
+      "version": "0.2.15",
       "repository": "https://github.com/xiao-qiu-qiu/ClinePassBridge",
       "homepage": "https://github.com/xiao-qiu-qiu/ClinePassBridge",
       "license": "MIT",
