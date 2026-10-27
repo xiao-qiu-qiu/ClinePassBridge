@@ -24,6 +24,7 @@ func streamIdleTimeout(timeout time.Duration) error {
 
 var wrappedRateLimit = regexp.MustCompile(`(?is)request failed with status 429:\s*.*rate limit exceeded`)
 var wrappedBadRequest = regexp.MustCompile(`(?i)\brequest failed with status\s+400\s*:\s*`)
+var wrappedRequestParam = regexp.MustCompile(`^\.?messages(?:\[[0-9]+\]|\.[a-zA-Z0-9_]+)+$`)
 var retrySecondsPattern = regexp.MustCompile(`(?i)retry after\s+(\d+(?:\.\d+)?)\s*s\b`)
 
 // Vercel reports the provider it routed to inside the response body. Failures
@@ -121,7 +122,7 @@ func hasUpstreamErrorStatus(body map[string]any, except int) bool {
 
 // A successful SSE response can hide the provider's HTTP 400 inside a gateway
 // message. Accept only its complete JSON error envelope and a recognized request
-// code/type, never a bare "400" or "Invalid input" in arbitrary error text.
+// identity, never a bare "400" or "Invalid input" in arbitrary error text.
 func wrappedUpstreamRequestError(message string) *upstreamRequestDetails {
 	if len(message) > 64<<10 {
 		return nil
@@ -135,17 +136,63 @@ func wrappedUpstreamRequestError(message string) *upstreamRequestDetails {
 		if err != nil || object(body["error"]) == nil || hasUpstreamErrorStatus(body, 400) {
 			return nil
 		}
-		codes := strings.Join(upstreamErrorCodes(body), " ")
 		message = errorMessage(body)
-		if isUpstreamCredentialError(body) || isUpstreamModelError(body) || isProviderTransportIncomplete(body) ||
-			quotaErrorType(codes, message) != "" || strings.Contains(codes, "rate_limit") {
+		if protectedWrappedUpstreamError(body) {
 			return nil
 		}
 		if isUpstreamRequestError(0, body) {
 			return &upstreamRequestDetails{Param: str(object(body["error"])["param"]), Message: message}
 		}
+		if request := wrappedAIAPICallRequestError(body); request != nil {
+			return request
+		}
 	}
 	return nil
+}
+
+func protectedWrappedUpstreamError(body map[string]any) bool {
+	codes := strings.Join(upstreamErrorCodes(body), " ")
+	return isUpstreamCredentialError(body) || isUpstreamModelError(body) || isProviderTransportIncomplete(body) ||
+		quotaErrorType(codes, errorMessage(body)) != "" || strings.Contains(codes, "rate_limit")
+}
+
+// The AI SDK's generic exception name is not itself a request-error identity.
+// Only inside the complete HTTP-400 wrapper, require its serialized API-call
+// metadata to confirm the same status before stopping host route fallback.
+func wrappedAIAPICallRequestError(body map[string]any) *upstreamRequestDetails {
+	detail := object(body["error"])
+	param := object(detail["param"])
+	if param == nil {
+		return nil
+	}
+	identified := false
+	for _, value := range []any{detail["type"], detail["name"], param["name"]} {
+		identified = identified || strings.EqualFold(strings.TrimSpace(str(value)), "AI_APICallError")
+	}
+	status, err := strconv.ParseInt(fmt.Sprint(param["statusCode"]), 10, 64)
+	if !identified || err != nil || status != http.StatusBadRequest || hasUpstreamErrorStatus(map[string]any{"error": param}, 400) {
+		return nil
+	}
+	message := errorMessage(body)
+	paramError := map[string]any{"error": map[string]any{
+		"code": param["code"], "type": param["type"],
+		"message": strings.Join([]string{message, str(param["error"]), str(param["message"])}, " "),
+	}}
+	if protectedWrappedUpstreamError(paramError) {
+		return nil
+	}
+	if strings.TrimSpace(message) == "" {
+		message = str(param["error"])
+		if strings.TrimSpace(message) == "" {
+			message = str(param["message"])
+		}
+	}
+	request := &upstreamRequestDetails{Message: message}
+	if path, reason, ok := strings.Cut(message, ":"); ok && wrappedRequestParam.MatchString(strings.TrimSpace(path)) {
+		request.Param = strings.TrimPrefix(strings.TrimSpace(path), ".")
+		request.Message = strings.TrimSpace(reason)
+	}
+	return request
 }
 
 func classifyUpstreamError(httpStatus int, headers http.Header, body map[string]any, now time.Time, fallback ...int) error {
