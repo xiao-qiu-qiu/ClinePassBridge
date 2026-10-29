@@ -593,7 +593,7 @@
         <select class="control" id="statusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="success">成功</option><option value="error">失败</option></select>
         <input class="control provider-filter" id="providerFilter" placeholder="实际渠道" aria-label="按实际渠道筛选" autocomplete="off">
         <label class="network-log-filter" title="仅显示上游已报告成功调用搜索工具的请求"><input id="networkOnly" type="checkbox">仅看搜索请求</label>
-        <label class="network-log-filter" title="上游实际服务模型带 contributor-fallbacks 之类后缀的请求：降级池按模型档位划分，钉上游无法避免，通常首字更慢"><input id="degradedOnly" type="checkbox">仅看降级池</label>
+        <label class="network-log-filter" title="仅显示上游回报的实际服务模型名匹配 fallback 后缀的请求"><input id="degradedOnly" type="checkbox">仅看降级池</label>
         <button class="button compact" id="refreshLogs" type="button" title="刷新日志和统计" data-icon="refresh">刷新</button>
         <span class="count" id="logCount">-- 条</span>
       </div>
@@ -1329,7 +1329,7 @@
     }
     function degradedTitle(log) {
       const served = String(log.served_model ?? '').trim();
-      return served ? `上游实际按 ${served} 服务：降级池不是按提供方选择的，钉上游无法避免；该池通常不共享前缀缓存，首字更慢。` : '该请求由上降级池服务。';
+      return served ? `上游回报的实际服务模型为 ${served}，模型名匹配降级池标记。缓存命中和首字耗时请查看本条请求日志。` : '上游回报的模型名匹配降级池标记。';
     }
     function datum(label, value, fallback = '未记录') { return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`; }
     function streamFrameLabel(kind) { return ({text: '正文', whitespace: '空白 / 换行', reasoning: '思考', tool: '工具调用', refusal: '拒绝内容', finish: '结束原因', done: '结束标记', error: '错误', metadata: '元数据 / 空增量'})[kind] || '未记录'; }

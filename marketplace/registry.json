@@ -7,7 +7,7 @@
       "logo": "https://raw.githubusercontent.com/xiao-qiu-qiu/ClinePassBridge/main/logo.png",
       "description": "将 Cline Pass 接入 CPA，支持多凭据管理、模型映射与上游选择、统一错误规则、额度耗尽自动暂停、流式与非流式调用及请求日志。实验性通用代理池默认关闭，支持标准 HTTP / HTTPS / SOCKS5 代理。 / Connect Cline Pass to CPA with multi-credential management, model mapping and provider selection, shared error rules, automatic quota pause, streaming and non-streaming requests, and request logs. The experimental general-purpose proxy pool is off by default and supports standard HTTP / HTTPS / SOCKS5 proxies.",
       "author": "xiao-qiu-qiu",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "repository": "https://github.com/xiao-qiu-qiu/ClinePassBridge",
       "homepage": "https://github.com/xiao-qiu-qiu/ClinePassBridge",
       "license": "MIT",
