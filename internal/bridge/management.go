@@ -237,6 +237,7 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 	status := r.Query.Get("status")
 	provider := r.Query.Get("provider")
 	networkUsed := r.Query.Get("network") == "used"
+	degradedFilter := r.Query.Get("degraded")
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	filtered := []LogEntry{}
@@ -256,11 +257,16 @@ func (s *Service) logsResponse(r ManagementRequest) (any, error) {
 				reasoning += " 未设置"
 			}
 		}
-		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.LastRequestID+" "+v.Model+" "+v.UpstreamModel+" "+v.Provider+" "+v.Error+" "+v.Credential+" "+reasoning+" "+v.ErrorKind+" "+label), search) {
+		if search != "" && !strings.Contains(strings.ToLower(v.ID+" "+v.LastRequestID+" "+v.Model+" "+v.UpstreamModel+" "+v.ServedModel+" "+v.Provider+" "+v.Error+" "+v.Credential+" "+reasoning+" "+v.ErrorKind+" "+label), search) {
 			continue
 		}
 		if provider != "" && provider != "all" && !matchesProvider(provider, v) {
 			continue
+		}
+		if degradedFilter != "" && degradedFilter != "all" {
+			if degradedFilter == "yes" && !v.Degraded || degradedFilter == "no" && v.Degraded {
+				continue
+			}
 		}
 		if status != "" && status != "all" {
 			if status == "success" && v.Status >= 400 || status == "error" && v.Status < 400 {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -352,9 +353,35 @@ func unwrap(body []byte) (map[string]any, error) {
 	return j, nil
 }
 
+// degradedModelPattern matches the model name Cline reports for a request it
+// served from a degraded pool rather than the one asked for: a suffix such as
+// "vmc/deepseek-v4p1-flash-1017-contributor-fallbacks". The pool is a routing
+// decision on the model tier, not on the provider: the same request can report
+// finalProvider "deepseek" and still be served here, so this name is the only
+// reliable signal that a request was degraded (2026-10-29, DeepSeek 1017).
+var degradedModelPattern = regexp.MustCompile(`(?i)contributor-fallbacks?$|/fallbacks?$|-fallbacks?$`)
+
+// observeServedModel records the model the upstream actually served and
+// whether that was a degraded pool. The response's own "model" field is the
+// only place Cline reports it, and the executor overwrites that field with the
+// client's model name before anything downstream sees it, so it has to be read
+// off each raw frame here.
+func observeServedModel(j map[string]any, entry *LogEntry, attempt *Attempt) {
+	served := strings.TrimSpace(str(j["model"]))
+	if served == "" {
+		return
+	}
+	entry.ServedModel = served
+	attempt.ServedModel = served
+	degraded := degradedModelPattern.MatchString(served)
+	entry.Degraded = degraded
+	attempt.Degraded = degraded
+}
+
 // Only explicit response routing facts count as actual providers. Candidate lists never do.
 func observeMetadata(j map[string]any, entry *LogEntry, attempt *Attempt) {
 	observeServerToolCalls(j, entry, attempt)
+	observeServedModel(j, entry, attempt)
 	apply := func(p, path string) {
 		if p != "" {
 			if strings.HasSuffix(attempt.ProviderSource, ".finalProvider") && !strings.HasSuffix(path, ".finalProvider") {

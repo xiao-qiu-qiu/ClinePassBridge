@@ -344,6 +344,8 @@ type Attempt struct {
 	ProviderSource          string           `json:"provider_source"`
 	DurationMS              int64            `json:"duration_ms"`
 	Error                   string           `json:"error,omitempty"`
+	ServedModel             string           `json:"served_model,omitempty"`
+	Degraded                bool             `json:"degraded,omitempty"`
 }
 type LogEntry struct {
 	ServerTools                 []string             `json:"server_tools,omitempty"`
@@ -384,6 +386,8 @@ type LogEntry struct {
 	Time                        time.Time `json:"time"`
 	Model                       string    `json:"model"`
 	UpstreamModel               string    `json:"upstream_model"`
+	ServedModel                 string    `json:"served_model,omitempty"`
+	Degraded                    bool      `json:"degraded,omitempty"`
 	Stream                      bool      `json:"stream"`
 	StreamEnd                   string    `json:"stream_end,omitempty"`
 	Status                      int       `json:"status"`

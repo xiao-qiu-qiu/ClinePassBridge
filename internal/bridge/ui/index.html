@@ -593,6 +593,7 @@
         <select class="control" id="statusFilter" aria-label="按状态筛选"><option value="">全部状态</option><option value="success">成功</option><option value="error">失败</option></select>
         <input class="control provider-filter" id="providerFilter" placeholder="实际渠道" aria-label="按实际渠道筛选" autocomplete="off">
         <label class="network-log-filter" title="仅显示上游已报告成功调用搜索工具的请求"><input id="networkOnly" type="checkbox">仅看搜索请求</label>
+        <label class="network-log-filter" title="上游实际服务模型带 contributor-fallbacks 之类后缀的请求：降级池按模型档位划分，钉上游无法避免，通常首字更慢"><input id="degradedOnly" type="checkbox">仅看降级池</label>
         <button class="button compact" id="refreshLogs" type="button" title="刷新日志和统计" data-icon="refresh">刷新</button>
         <span class="count" id="logCount">-- 条</span>
       </div>
@@ -1326,6 +1327,10 @@
       const provider = String(value ?? '').trim();
       return provider.toLowerCase() === 'unknown' ? '' : provider;
     }
+    function degradedTitle(log) {
+      const served = String(log.served_model ?? '').trim();
+      return served ? `上游实际按 ${served} 服务：降级池不是按提供方选择的，钉上游无法避免；该池通常不共享前缀缓存，首字更慢。` : '该请求由上降级池服务。';
+    }
     function datum(label, value, fallback = '未记录') { return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`; }
     function streamFrameLabel(kind) { return ({text: '正文', whitespace: '空白 / 换行', reasoning: '思考', tool: '工具调用', refusal: '拒绝内容', finish: '结束原因', done: '结束标记', error: '错误', metadata: '元数据 / 空增量'})[kind] || '未记录'; }
     function reasoningText(log) {
@@ -1391,7 +1396,7 @@
         <div class="cell"><span class="cell-label">思考强度</span><span class="badge reasoning-badge" title="${log.reasoning_mapping ? (local ? '映射已计算；本次被本地退避拦截，未发往上游' : '插件收到的强度 → 发往上游的强度') : '未应用插件映射；— 表示未识别到显式强度'}">${esc(reasoningText(log))}</span></div>
         <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : incomplete ? '响应截断' : idleCutoff ? '卡住截流' : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div>${networkLogBadge(log)}</div>
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
-        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
+        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div>${log.degraded === true ? `<span class="badge warn" title="${esc(degradedTitle(log))}">降级池</span>` : ''}</div>
         <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.ttft_ms, 'ttft', local, log.completion_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', local, log.completion_tokens)}</div></div>
         <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="${esc(usageTitle)}"><span>${logTokenValue(log, 'prompt_tokens')}</span><span>/ ${logTokenValue(log, 'completion_tokens')}</span></div><div class="subtext log-usage"><span>缓存 ${logTokenValue(log, 'cached_tokens')}</span><span class="log-cache-rate" title="本条请求缓存命中率 = 缓存 tokens ÷ 输入 tokens；没有有效输入用量或未调用上游时显示 —。">(${requestCacheRate(log)})</span><span class="log-speed" title="输出 tokens ÷（总耗时 − 首字时间）；首字未记录时使用总耗时。直接展示服务端原始速率，不应用平均速率的 0.5 秒阈值。">· ${speed}</span></div></div>
         <span class="chevron" aria-hidden="true">›</span></summary>
@@ -1401,6 +1406,7 @@
             ${datum('最近请求 ID', log.last_request_id || log.id, '—')}
             ${datum(log.reasoning_mapping ? '思考强度（传入 → 发往上游）' : '思考强度', reasoningText(log))}
             ${datum('实际上游', actualProvider(log.provider, log.upstream_skipped), '未知')}
+            ${datum('实际服务模型', log.served_model || '未报告', '未报告')}
             ${datum('实际凭据', credential, '—')}
             ${datum('上游请求', `${number(upstreamAttempts)} 次`)}
             ${networkLogDetails(log)}
@@ -1552,7 +1558,7 @@
       syncLogsRefreshButton();
       $('logList').innerHTML = '<div class="empty">正在读取日志…</div>';
       try {
-        const data = await api('/logs', { query: { limit: PAGE_SIZE, offset: state.page * PAGE_SIZE, search: $('search').value.trim(), status: $('statusFilter').value, provider: $('providerFilter').value, network: $('networkOnly').checked ? 'used' : '' }, signal: controller.signal });
+        const data = await api('/logs', { query: { limit: PAGE_SIZE, offset: state.page * PAGE_SIZE, search: $('search').value.trim(), status: $('statusFilter').value, provider: $('providerFilter').value, network: $('networkOnly').checked ? 'used' : '', degraded: $('degradedOnly').checked ? 'yes' : '' }, signal: controller.signal });
         if (controller !== state.logsController) return;
         state.logDebug = data?.debug === true;
         const items = Array.isArray(data?.items) ? data.items : [];
@@ -2388,6 +2394,7 @@
     $('statusFilter').addEventListener('change', () => { state.page = 0; loadLogs(); });
     $('providerFilter').addEventListener('change', () => { state.page = 0; loadLogs(); });
     $('networkOnly').addEventListener('change', () => { state.page = 0; loadLogs(); });
+    $('degradedOnly').addEventListener('change', () => { state.page = 0; loadLogs(); });
     $('authButton').addEventListener('click', () => { renderAuthState(); $('authDialog').showModal(); });
     $('closeAuth').addEventListener('click', () => $('authDialog').close());
     $('clearAuth').addEventListener('click', () => { state.key = ''; state.rememberAuth = false; window.PassBridgeClearAuth?.(); $('authKey').value = ''; $('rememberAuth').checked = false; pauseAuth(new Error('插件手动保存的管理密钥已清除，请重新验证')); toast('插件手动保存的管理密钥已清除'); });
