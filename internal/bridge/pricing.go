@@ -23,9 +23,11 @@ func referenceCost(e LogEntry) (priceRange, bool) {
 	if !e.UsageReported || e.PromptTokens < 0 || e.CompletionTokens < 0 || e.CachedTokens < 0 || e.CacheWriteTokens < 0 || e.CachedTokens+e.CacheWriteTokens > e.PromptTokens {
 		return priceRange{}, false
 	}
+	deepseekFlash := tokenPrice{.30, 1.20, .006, 0}
 	prices := map[string]tokenPrice{
 		"glm-5.3": {1.40, 4.40, .26, 0}, "glm-5.3-flash": {.15, .50, .03, 0},
-		"kimi-k3": {3, 15, .30, 0}, "deepseek-v4.1-flash": {.30, 1.20, .006, 0},
+		"kimi-k3": {3, 15, .30, 0}, "deepseek-v4.1-flash": deepseekFlash,
+		"deepseek-v4.1-flash-1017": deepseekFlash,
 		"mimo-v2.5": {.14, .28, .0028, 0}, "mimo-v2.5-pro": {1.74, 3.48, .0145, 0},
 		"minimax-m3": {.30, 1.20, .06, 0}, "muse-spark-1.3-contributor": {.10, .20, .002, 0},
 		"qwen3.8-max": {2, 6, .25, 2.50}, "qwen3.7-max": {2.50, 7.50, .50, 3.125},
