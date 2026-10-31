@@ -6,6 +6,8 @@
 
 管理页可以沿用同源 CPA / CPAMP 通过「记住密码」保存的登录信息。管理中心跨域或没有保存登录信息时，输入当前入口的管理密钥：直连 CPA 使用 CPA 管理密钥，经 CPAMP 完整模式访问则使用该面板的管理密钥。
 
+兼容 CPA 管理前端 v1.27.0 的新登录存储格式，也保留旧版 CPA 和 CPAMP 的读取方式。该版管理前端升级时会清除旧登录记录，需要先在管理中心重新登录并勾选「记住密码」，插件才能自动复用。具体变更见[上游登录存储更新](https://github.com/router-for-me/Cli-Proxy-API-Management-Center/commit/1650cf2f726685da188237eda9e5345d0bd15354)。
+
 支持通过子目录反向代理访问：例如管理页位于 `/my-cpa/v0/resource/plugins/clinepassbridge/console` 时，管理请求会自动使用 `/my-cpa/v0/management/clinepassbridge/`。多级子目录同样适用，保存的管理密钥也按当前子目录隔离。
 
 手动输入的密钥通过验证后才会保存，默认保留到标签页会话结束。勾选「在此浏览器记住管理密钥」后保存在当前站点的 `localStorage`，按服务地址和代理路径区分。「清除密钥」或收到 401 时会删除插件保存的对应密钥。

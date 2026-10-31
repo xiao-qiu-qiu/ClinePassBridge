@@ -35,17 +35,24 @@
   function readSavedLogin() {
     try {
       if (localStorage.getItem('isLoggedIn') !== 'true') return null;
-      let value = localStorage.getItem('cli-proxy-auth');
+      const value = localStorage.getItem('cli-proxy-auth');
       if (!value) return null;
       const v2 = value.startsWith('enc::v2::');
+      let saved;
       if (v2 || value.startsWith('enc::v1::')) {
         const bytes = Uint8Array.from(atob(value.slice(9)), c => c.charCodeAt(0));
-        const mask = new TextEncoder().encode(v2
-          ? `cli-proxy-api-webui::secure-storage|v2|${location.host}`
-          : `cli-proxy-api-webui::secure-storage|${location.host}|${navigator.userAgent}`);
-        value = new TextDecoder().decode(bytes.map((byte, i) => byte ^ mask[i % mask.length]));
-      }
-      const saved = JSON.parse(value)?.state;
+        // Official v2 and CPAMP v2 share a prefix but use different masks.
+        const masks = v2
+          ? [`cli-proxy-api-webui::secure-storage|${location.host}`, `cli-proxy-api-webui::secure-storage|v2|${location.host}`]
+          : [`cli-proxy-api-webui::secure-storage|${location.host}|${navigator.userAgent}`];
+        for (const candidate of masks) {
+          try {
+            const mask = new TextEncoder().encode(candidate);
+            saved = JSON.parse(new TextDecoder().decode(bytes.map((byte, i) => byte ^ mask[i % mask.length])))?.state;
+            break;
+          } catch { /* Try the next local format without sending a request. */ }
+        }
+      } else saved = JSON.parse(value)?.state;
       if (!saved || saved.rememberPassword !== true || typeof saved.managementKey !== 'string' || !saved.managementKey.trim()) return null;
       const server = new URL(saved.apiBase);
       const own = endpoint();

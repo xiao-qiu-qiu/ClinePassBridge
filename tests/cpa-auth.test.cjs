@@ -9,6 +9,14 @@ const origin = 'https://cpa.example';
 const userAgent = 'PassBridge auth regression fixture';
 const key = 'fixture-management-key';
 
+// Fixed synthetic fixtures using the official obfuscateData format from
+// router-for-me/Cli-Proxy-API-Management-Center, src/utils/encryption.ts,
+// commit 1650cf2f726685da188237eda9e5345d0bd15354 (v1.27.0).
+// Host: cpa.example; plaintext: savedLogin(), or savedLogin(origin, false).
+// Keep these independent of encrypted(), which models the existing CPAMP format.
+const officialV2 = 'enc::v2::GE4aWREGClpDVkMRGUQ1BBEQSwAYGxEXBQFfAlwXHxNPAh0dDgANS0dUQwARAgQECQRIHgYkHQAPW1IPRA8RFwcMF1cSCwISFwhIHQBCGQQeR1BBAgRDABUDCAI8BBAfHkICFk1CDV8UFRQBVRMHBxpTVR1HWUUP';
+const officialV2Unremembered = 'enc::v2::GE4aWREGClpDVkMRGUQ1BBEQSwAYGxEXBQFfAlwXHxNPAh0dDgANS0dUQwARAgQECQRIHgYkHQAPW1IPRA8RFwcMF1cSCwISFwhIHQBCGQQeR1BBAgRDABUDCAI8BBAfHkICFk1CH0wNAwxQW0cUEBtJUxwLQU9CGA==';
+
 function savedLogin(apiBase = origin, rememberPassword = true) {
   return { state: { apiBase, managementKey: key, rememberPassword }, version: 0 };
 }
@@ -54,6 +62,25 @@ async function headers(options) {
 
 test('reuse existing remembered login, encrypted or plain', async () => {
   for (const encoded of [true, false]) assert.deepEqual(await headers({ encoded }), { Authorization: `Bearer ${key}` });
+});
+
+test('reuse official v2 login even after the user agent changes', async () => {
+  const persistent = new Map([['cli-proxy-auth', officialV2]]);
+  for (const agent of [userAgent, 'Changed browser user agent']) {
+    assert.deepEqual(await headers({ persistent, userAgent: agent }), { Authorization: `Bearer ${key}` });
+  }
+});
+
+test('official v2 retains origin, path, logout and remember-password constraints', async () => {
+  for (const options of [
+    { consoleURL: 'http://cpa.example/v0/resource/plugins/clinepassbridge/console' },
+    { apiBase: '/other/v0/management/clinepassbridge' },
+    { loggedIn: 'false' },
+    { payload: officialV2Unremembered },
+  ]) {
+    const persistent = new Map([['cli-proxy-auth', options.payload || officialV2]]);
+    assert.deepEqual(await headers({ ...options, persistent }), {});
+  }
 });
 
 test('reuse CPAMP v2 login even after the user agent changes', async () => {
