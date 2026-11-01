@@ -469,12 +469,12 @@ func (s *Service) estimateViewLocked(c Credential, value credentialUsage) *accou
 				if result.Preliminary {
 					result.Note += "；初步估计：样本较少，数据可能不准"
 				}
-				// Use nominal consumption / observed change. A price midpoint handles
-				// the existing peak/off-peak ledger without inventing precision bands.
+				// Use nominal consumption / observed change. Unresolved time-of-use
+				// or cache-write TTL rates use the midpoint of their reference costs.
 				amount := 100 * ((sample.Cost.Low + sample.Cost.High) / 2) / sample.Delta
 				total := priceRange{amount, amount}
 				if sample.Cost.Low != sample.Cost.High {
-					result.Note += "；峰谷计价未明确时按两档参考成本的平均值估算"
+					result.Note += "；峰谷时段或缓存写入有效期未明确时按参考成本区间的均值估算"
 				}
 				result.Total = &total
 				for _, limit := range value.Limits {

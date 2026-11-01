@@ -2169,7 +2169,7 @@
         return `<div><strong>${esc(label)}</strong><span title="${esc(details)}"><span class="estimate-formula">${formula}</span>${status ? `<span class="estimate-sample-state">${esc(status)}</span>` : ''}</span></div>`;
       }).join('');
       const shared = estimate?.shared_credentials > 1 ? `同账号 ${actual(Number(estimate.shared_credentials).toLocaleString())} 个凭据合并采样。` : '';
-      return `<div class="estimate-samples">${samples}</div><p>以上结果为估计总额度（USD），与卡片金额一致。${shared}</p><p>仅记录经 CPA 本插件的请求，无法估计未流经 CPA 的流量。</p><p>用量增加 1 个百分点开始估算，达到 2 个百分点校准。后台约每分钟采样；周期重置后沿用历史估值，新样本校准后更新。</p><p><a href="https://docs.cline.bot/getting-started/clinepass#reference-pricing" target="_blank" rel="noopener noreferrer">Cline 官网计价 ↗</a> · 采用 2026-09-28 价格快照。缓存读写分别计价，DeepSeek V4 Pro 取峰谷均价；缺失用量或未列价模型的消费不计入。金额为用量折算值，非套餐售价。</p>${estimate?.persistence_error ? `<p class="error-text">${esc(estimate.persistence_error)}</p>` : ''}`;
+      return `<div class="estimate-samples">${samples}</div><p>以上结果为估计总额度（USD），与卡片金额一致。${shared}</p><p>仅记录经 CPA 本插件的请求，无法估计未流经 CPA 的流量。</p><p>用量增加 1 个百分点开始估算，达到 2 个百分点校准。后台约每分钟采样；周期重置后沿用历史估值，新样本校准后更新。</p><p><a href="https://docs.cline.bot/getting-started/clinepass#reference-pricing" target="_blank" rel="noopener noreferrer">Cline 官网计价 ↗</a> · 采用 2026-11-02 价格快照。DeepSeek 峰时为北京时间周一至周五 09:00–12:00、14:00–18:00，中国公众假期除外；其余时间、周末及公众假期全天为半价谷时。已收录 2026 年假期；跨档或假期尚未收录时取峰谷均价。缓存读写分别计价，Kimi 写入有效期未知时取 5 分钟与 1 小时两档均价；缺失用量或未列价模型的消费不计入。金额为用量折算值，非套餐售价。</p>${estimate?.persistence_error ? `<p class="error-text">${esc(estimate.persistence_error)}</p>` : ''}`;
     }
     function refreshEstimateDialog() {
       const dialog = $('estimateDialog');

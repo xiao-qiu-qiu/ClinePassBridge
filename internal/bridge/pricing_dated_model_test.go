@@ -8,7 +8,7 @@ func TestDatedFlashReferenceCost(t *testing.T) {
 		if !ok {
 			t.Fatalf("supported model excluded: %s", model)
 		}
-		estimateCloseTo(t, cost.Low, .0888, "reference cost low")
+		estimateCloseTo(t, cost.Low, .0444, "reference cost low")
 		estimateCloseTo(t, cost.High, .0888, "reference cost high")
 	}
 	for _, model := range []string{"cline-pass/deepseek-v4.1-flash-1018", "deepseek-v4.1-flash-1017", "cline-pass/deepseek-v4.1-flash-1017-custom"} {
@@ -28,5 +28,6 @@ func TestDatedFlashEstimateLedger(t *testing.T) {
 	if k.Totals.Requests != 1 || k.Totals.Tokens != 1020000 || k.Totals.Unknown != 0 {
 		t.Fatalf("dated model not recorded as priced: %+v", k.Totals)
 	}
-	estimateCloseTo(t, k.Totals.Cost.Low, .0888, "ledger cost")
+	estimateCloseTo(t, k.Totals.Cost.Low, .0888, "peak ledger cost low")
+	estimateCloseTo(t, k.Totals.Cost.High, .0888, "peak ledger cost high")
 }

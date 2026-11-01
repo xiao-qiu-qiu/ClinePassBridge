@@ -53,6 +53,11 @@ func estimateCalibrate(s *Service, c Credential, value credentialUsage) {
 	s.calibrateEstimateLocked(c, value, before)
 }
 
+// 固定使用非节假日工作日峰时，让采样行为测试不依赖运行时钟。
+func estimatePeakTime() time.Time {
+	return time.Date(2026, time.November, 2, 2, 0, 0, 0, time.UTC)
+}
+
 // estimateRecordUsage 走真实 appendLog 路径记一笔可计价请求。
 func estimateRecordUsage(t *testing.T, s *Service, c Credential, upstreamModel string, prompt, completion, cached, write int64) {
 	t.Helper()
@@ -71,7 +76,8 @@ func estimateRecordUsage(t *testing.T, s *Service, c Credential, upstreamModel s
 		CacheWriteTokens:   write,
 		CacheWriteReported: write > 0,
 		Status:             200,
-		Time:               time.Now().UTC(),
+		Time:               estimatePeakTime(),
+		DurationMS:         1000,
 		Attempts:           []Attempt{{Status: 200, Mode: "stream"}},
 	})
 }
@@ -986,6 +992,7 @@ func TestEstimateMarksConcurrentSamplesWhileRequestsOrQueriesInFlight(t *testing
 		s.appendLog(LogEntry{
 			estimateKey: key, CredentialID: c.ID, Status: 200, UsageReported: true,
 			UpstreamModel: "cline-pass/deepseek-v4.1-flash", PromptTokens: 200000, CompletionTokens: 1000,
+			Time: estimatePeakTime(), DurationMS: 1000,
 			Attempts: []Attempt{{Status: 200}},
 		})
 	}
@@ -1525,7 +1532,10 @@ func TestEstimatePeakValleyCostUsesMidpoint(t *testing.T) {
 	valley := peak / 2
 
 	estimateCalibrate(s, c, usage(10, t0))
-	estimateRecordUsage(t, s, c, "cline-pass/deepseek-v4-pro", 200000, 1000, 0, 0)
+	// 故意缺少请求时间：无法选定峰谷档，账本与估值应保留区间及均价。
+	entry := estimatePricedEntry("cline-pass/deepseek-v4-pro", 200000, 1000, 0, 0, false)
+	entry.estimateKey, entry.CredentialID = s.startEstimateRequest(c), c.ID
+	s.appendLog(entry)
 	estimateCalibrate(s, c, usage(12, t1))
 
 	w := estimateWindowSnapshot(t, s, account, "five_hour")
@@ -1554,11 +1564,13 @@ func TestPricingCachedReadIsNotChargedAsInput(t *testing.T) {
 	if !ok {
 		t.Fatal("缓存读请求未计价")
 	}
-	estimateCloseTo(t, plain.Low, 200000*0.30/1e6, "输入成本")
+	estimateCloseTo(t, plain.Low, 200000*0.15/1e6, "谷时输入成本")
+	estimateCloseTo(t, plain.High, 200000*0.30/1e6, "峰时输入成本")
 	if cached.Low >= plain.Low {
 		t.Fatalf("缓存读被按输入价重复收费: cached=%v plain=%v", cached.Low, plain.Low)
 	}
-	estimateCloseTo(t, cached.Low, (100000*0.30+100000*0.006)/1e6, "缓存读成本")
+	estimateCloseTo(t, cached.Low, (100000*0.15+100000*0.003)/1e6, "谷时缓存读成本")
+	estimateCloseTo(t, cached.High, (100000*0.30+100000*0.006)/1e6, "峰时缓存读成本")
 }
 
 func TestPricingQwenWriteRequirementAndHighContextThreshold(t *testing.T) {
@@ -1681,6 +1693,7 @@ func TestUsageEstimateIntegrationReturnsTotalWithoutSecrets(t *testing.T) {
 	c := s.creds["one"]
 	s.mu.RUnlock()
 	entry := s.newLog(ExecutorRequest{Model: "deepseek-flash", HostCallbackID: "usage-callback"}, c, "cline-pass/deepseek-v4.1-flash")
+	entry.Time, entry.DurationMS = estimatePeakTime(), 1000
 	attempt := Attempt{Mode: "stream"}
 	observeMetadata(map[string]any{"usage": map[string]any{
 		"prompt_tokens":         float64(200000),
