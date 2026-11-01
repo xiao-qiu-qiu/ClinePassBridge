@@ -2169,7 +2169,15 @@
         return `<div><strong>${esc(label)}</strong><span title="${esc(details)}"><span class="estimate-formula">${formula}</span>${status ? `<span class="estimate-sample-state">${esc(status)}</span>` : ''}</span></div>`;
       }).join('');
       const shared = estimate?.shared_credentials > 1 ? `同账号 ${actual(Number(estimate.shared_credentials).toLocaleString())} 个凭据合并采样。` : '';
-      return `<div class="estimate-samples">${samples}</div><p>以上结果为估计总额度（USD），与卡片金额一致。${shared}</p><p>仅记录经 CPA 本插件的请求，无法估计未流经 CPA 的流量。</p><p>用量增加 1 个百分点开始估算，达到 2 个百分点校准。后台约每分钟采样；周期重置后沿用历史估值，新样本校准后更新。</p><p><a href="https://docs.cline.bot/getting-started/clinepass#reference-pricing" target="_blank" rel="noopener noreferrer">Cline 官网计价 ↗</a> · 采用 2026-11-02 价格快照。DeepSeek 峰时为北京时间周一至周五 09:00–12:00、14:00–18:00，中国公众假期除外；其余时间、周末及公众假期全天为半价谷时。已收录 2026 年假期；跨档或假期尚未收录时取峰谷均价。缓存读写分别计价，Kimi 写入有效期未知时取 5 分钟与 1 小时两档均价；缺失用量或未列价模型的消费不计入。金额为用量折算值，非套餐售价。</p>${estimate?.persistence_error ? `<p class="error-text">${esc(estimate.persistence_error)}</p>` : ''}`;
+      return `<div class="estimate-samples">${samples}</div>
+<p><strong>估算范围：</strong>以上为估计总额度，与卡片金额一致。同账号多个 Key 共享额度并合并采样，不累加额度。${shared}仅统计经 CPA 本插件记录的请求，按全部消费均经本插件估算。</p>
+<p><strong>采样方式：</strong>后台约每分钟采样，关闭页面仍继续；用量累计增加 1 个百分点显示初步估计，达到 2 个百分点后校准。5 小时与每周独立采样；月总额度取周估值的 2 倍，等待周采样并跟随其初步／历史状态，月剩余按实际月已用百分比计算。</p>
+<p><strong>计价口径：</strong>采用 <a href="https://docs.cline.bot/getting-started/clinepass#reference-pricing" target="_blank" rel="noopener noreferrer">Cline 官方参考价 ↗</a> 的 2026-11-02 快照，按实际上游模型 ID 匹配，客户端别名不影响计价。普通输入从总输入扣除缓存读取与写入后计费，缓存读写单独计价；推理 token 已包含在输出中，不重复计费。金额为 USD 参考折算值，非订阅售价。</p>
+<p><strong>DeepSeek 峰谷：</strong>V4.1 Flash（含 1017）与 V4 Pro 按 <a href="https://api-docs.deepseek.com/quick_start/pricing/" target="_blank" rel="noopener noreferrer">DeepSeek 官方规则 ↗</a>：北京时间（UTC+8）周一至周五 09:00–12:00、14:00–18:00 为峰时（起点含、终点不含），公众假期除外；其余时间、周末及公众假期全天为半价谷时，周末补班仍按谷时。假期按 <a href="https://www.gov.cn/zhengce/content/202511/content_7047090.htm" target="_blank" rel="noopener noreferrer">政府 2026 年放假调休公告 ↗</a> 范围估算，并非已确认的供应商后台日历。请求跨档、缺少时间，或无法确认峰时日期是否为假期时，保留峰谷成本区间并取均值；确定的夜间、周末仍用谷价。</p>
+<p><strong>Kimi 写入：</strong>K3 的 5 分钟／1 小时缓存写入价为 3／6，K3.1 Pro 为 2／4（USD／百万 token）。未区分写入有效期时，仅对写入部分保留两档成本并取均值，输入、输出和缓存读取仍按确定价格计算。</p>
+<p><strong>写入数与长输入：</strong>Qwen、Kimi 必须显式返回缓存写入数（包括 0），缺失则标记用量不完整。分档按含缓存读写的总输入计算：Qwen3.7 Plus 超过 262,144 token 后整个请求采用高价档；MiniMax M3 超过 524,288 token 后整个请求的输入、输出、缓存读取价均翻倍。</p>
+<p><strong>不完整消费：</strong>未登记价格的模型 ID 不套用近似型号价格。缺失 usage、未知价格、失败或重试会标记不完整，保留同段可计价的已知消费，不丢弃整段采样，也不把缺失部分当作零消费；缺失消费可能使估值偏低。</p>
+<p><strong>周期与版本：</strong>周期重置后沿用历史估值，新周期样本校准后替换，不跨账号或套餐变更沿用。同价格版本重启保留估值，仅重建下一段基线；升级只有在价格版本变化时才重新采样，避免混用新旧价格。</p>${estimate?.persistence_error ? `<p class="error-text">${esc(estimate.persistence_error)}</p>` : ''}`;
     }
     function refreshEstimateDialog() {
       const dialog = $('estimateDialog');
