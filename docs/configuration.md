@@ -4,6 +4,8 @@
 
 ## DeepSeek 1017 默认 provider 策略
 
+DeepSeek 1017 区域约束方法参考 [LINUX DO 讨论](https://linux.do/t/topic/3119385)。
+
 使用预设模式（`routing_mode: preset`，缺失也按预设处理）和默认的「插件配置优先」（`provider_policy: config`），且上游 ID 精确为 `cline-pass/deepseek-v4.1-flash-1017`、允许列表仅为 `["deepseek"]` 时，插件在已解析的 `gateway.only` / `gateway.order` 基础上自动附加：
 
 ```json
