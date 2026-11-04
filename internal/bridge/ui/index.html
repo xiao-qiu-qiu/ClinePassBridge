@@ -1349,10 +1349,6 @@
       const provider = String(value ?? '').trim();
       return provider.toLowerCase() === 'unknown' ? '' : provider;
     }
-    function degradedTitle(log) {
-      const served = String(log.served_model ?? '').trim();
-      return served ? `上游回报的实际服务模型为 ${served}，模型名匹配降级池标记。缓存命中和首字耗时请查看本条请求日志。` : '上游回报的模型名匹配降级池标记。';
-    }
     function datum(label, value, fallback = '未记录') { return `<div><div class="datum-label">${label}</div><div class="datum-value">${shown(value, fallback)}</div></div>`; }
     function streamFrameLabel(kind) { return ({text: '正文', whitespace: '空白 / 换行', reasoning: '思考', tool: '工具调用', refusal: '拒绝内容', finish: '结束原因', done: '结束标记', error: '错误', metadata: '元数据 / 空增量'})[kind] || '未记录'; }
     function reasoningText(log) {
@@ -1402,6 +1398,7 @@
       const limitName = teamLimited ? '上游团队限流' : '请求限流';
       const limitLabel = limited ? (remaining > 0 ? `${limitName}，${remaining} 秒后可重试` : limitName) : incomplete ? `上游响应截断 · ${logCooldownText(log)}` : idleCutoff ? `流式卡住时提前截流 · ${logCooldownText(log)}` : '';
       const actual = shown(actualProvider(log.provider, log.upstream_skipped), '未知');
+      const responseModel = String(log.served_model ?? '').trim();
       const credential = present(log.credential) ? log.credential : present(log.credential_id) ? log.credential_id : '—';
       const attempts = !local && Array.isArray(log.attempts) ? log.attempts.filter((attempt) => attempt.upstream_skipped !== true) : [];
       const upstreamAttempts = local ? 0 : Number.isInteger(log.upstream_attempt_count) && log.upstream_attempt_count >= 0 ? log.upstream_attempt_count : attempts.length;
@@ -1414,11 +1411,11 @@
       }).join('') : `<div class="subtext">${local ? '本地退避拦截，未发起上游请求' : '无尝试明细'}</div>`;
       return `<details class="log-entry" data-id="${esc(log.id)}"><summary class="row-main">
         <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${local ? '首 ' : ''}${formatTime(log.time)}</div>${local ? `<div class="subtext mono">末 ${formatTime(lastTime)}</div>` : ''}</div>
-        <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div></div>
+        <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono log-served-model" title="${esc(`真实响应模型：${responseModel || '未报告'}`)}">响应：${shown(responseModel, '未报告')}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div></div>
         <div class="cell"><span class="cell-label">思考强度</span><span class="badge reasoning-badge" title="${log.reasoning_mapping ? (local ? '映射已计算；本次被本地退避拦截，未发往上游' : '插件收到的强度 → 发往上游的强度') : '未应用插件映射；— 表示未识别到显式强度'}">${esc(reasoningText(log))}</span></div>
         <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : incomplete ? '响应截断' : idleCutoff ? '卡住截流' : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div>${networkLogBadge(log)}</div>
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
-        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div>${log.degraded === true ? `<span class="badge warn" title="${esc(degradedTitle(log))}">降级池</span>` : ''}</div>
+        <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
         <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.ttft_ms, 'ttft', local, log.completion_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', local, log.completion_tokens)}</div></div>
         <div class="cell"><span class="cell-label">用量</span><div class="log-usage" title="${esc(usageTitle)}"><span>${logTokenValue(log, 'prompt_tokens')}</span><span>/ ${logTokenValue(log, 'completion_tokens')}</span></div><div class="subtext log-usage"><span>缓存 ${logTokenValue(log, 'cached_tokens')}</span><span class="log-cache-rate" title="本条请求缓存命中率 = 缓存 tokens ÷ 输入 tokens；没有有效输入用量或未调用上游时显示 —。">(${requestCacheRate(log)})</span><span class="log-speed" title="输出 tokens ÷（总耗时 − 首字时间）；首字未记录时使用总耗时。直接展示服务端原始速率，不应用平均速率的 0.5 秒阈值。">· ${speed}</span></div></div>
         <span class="chevron" aria-hidden="true">›</span></summary>
@@ -1428,7 +1425,7 @@
             ${datum('最近请求 ID', log.last_request_id || log.id, '—')}
             ${datum(log.reasoning_mapping ? '思考强度（传入 → 发往上游）' : '思考强度', reasoningText(log))}
             ${datum('实际上游', actualProvider(log.provider, log.upstream_skipped), '未知')}
-            ${datum('实际服务模型', log.served_model || '未报告', '未报告')}
+            ${datum('真实响应模型', responseModel, '未报告')}
             ${datum('实际凭据', credential, '—')}
             ${datum('上游请求', `${number(upstreamAttempts)} 次`)}
             ${networkLogDetails(log)}
