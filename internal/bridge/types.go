@@ -129,8 +129,6 @@ func requestErrorRules() []RequestErrorRule {
 }
 
 type Model struct {
-	// OfficialRouting applies the experimental 1017 private-region exclusion.
-	OfficialRouting  bool                    `json:"official_routing,omitempty" yaml:"official_routing,omitempty"`
 	ReasoningMapping *ReasoningMappingConfig `json:"reasoning_mapping,omitempty" yaml:"reasoning_mapping,omitempty"`
 	ID               string                  `json:"id" yaml:"id"`
 	UpstreamID       string                  `json:"upstream_id" yaml:"upstream_id"`
@@ -228,9 +226,6 @@ func (c *Config) validate() error {
 			return fail(400, "model aliases must be nonempty and unique")
 		}
 		seen[m.ID] = true
-		if m.OfficialRouting && m.UpstreamID != "cline-pass/deepseek-v4.1-flash-1017" {
-			return fail(400, "official_routing is only supported for cline-pass/deepseek-v4.1-flash-1017")
-		}
 		if m.ReasoningMapping == nil {
 			m.ReasoningMapping = defaultModelReasoningMapping(m.UpstreamID)
 			if c.ReasoningMapping != nil && strings.Contains(strings.ToLower(m.UpstreamID), "deepseek") {
