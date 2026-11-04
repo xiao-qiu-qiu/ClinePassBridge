@@ -1,29 +1,23 @@
 package bridge
 
-import "encoding/json"
-
-func (s *Service) saveOfficialRouting(r ManagementRequest) (any, error) {
-	var in struct {
-		Model      string `json:"model"`
-		UpstreamID string `json:"upstream_id"`
-		Enabled    *bool  `json:"enabled"`
+// applyOfficialRegion strengthens the existing config policy when the operator
+// pins exactly DeepSeek for 1017. Client policy and broader allow-lists retain
+// their original semantics; no extra setting or persisted switch is needed.
+func applyOfficialRegion(gateway map[string]any, cfg Config, alias string) {
+	if cfg.ProviderPolicy != ProviderPolicyConfig {
+		return
 	}
-	if err := json.Unmarshal(r.Body, &in); err != nil || in.Enabled == nil {
-		return managementJSON(400, map[string]any{"error": "invalid official routing settings"})
+	pinned := cfg.pinnedProviders(alias)
+	if len(pinned) != 1 || pinned[0] != "deepseek" {
+		return
 	}
-	cfg := s.config()
-	for i := range cfg.Models {
-		if cfg.Models[i].ID != in.Model {
-			continue
+	for _, model := range cfg.Models {
+		if model.ID == alias && model.UpstreamID == "cline-pass/deepseek-v4.1-flash-1017" {
+			gateway["inferenceRegion"] = map[string]any{
+				"scope":     "global",
+				"providers": map[string]any{"openai-compatible-private": map[string]any{"scope": "zone", "geoRegion": "us"}},
+			}
+			return
 		}
-		if cfg.Models[i].UpstreamID != in.UpstreamID {
-			return managementJSON(409, map[string]any{"error": "模型已变更，请刷新后重试"})
-		}
-		cfg.Models[i].OfficialRouting = *in.Enabled
-		if err := s.saveConfig(cfg); err != nil {
-			return managementJSON(statusOf(err), map[string]any{"error": safeError(err)})
-		}
-		return managementJSON(200, map[string]any{"models": cfg.Models})
 	}
-	return managementJSON(404, map[string]any{"error": "模型不存在，请刷新后重试"})
 }
