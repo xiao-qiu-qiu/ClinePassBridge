@@ -28,7 +28,7 @@ func (s *Service) registerManagement(raw json.RawMessage) (any, error) {
 	for _, p := range []string{"models/refresh", "models/test", "models/providers", "credentials", "credentials/clear-affinity", "statistics/reset", "scheduling/reset", "error-rules/sync", "error-rules/reset"} {
 		routes = append(routes, map[string]string{"Method": "POST", "Path": apiBase + "/" + p})
 	}
-	for _, p := range []string{"models", "models/reasoning", "config", "credentials", "scheduling/credential", "egress", "error-rules", "models/server-tools"} {
+	for _, p := range []string{"models", "models/reasoning", "models/official-routing", "config", "credentials", "scheduling/credential", "egress", "error-rules", "models/server-tools"} {
 		routes = append(routes, map[string]string{"Method": "PUT", "Path": apiBase + "/" + p})
 	}
 	routes = append(routes, map[string]string{"Method": "DELETE", "Path": apiBase + "/credentials"})
@@ -90,7 +90,7 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(404, map[string]any{"error": "not found"})
 	}
 	p := strings.TrimPrefix(r.Path, apiBase)
-	if r.Method == "PUT" && (p == "/config" || p == "/models" || p == "/models/reasoning" || p == "/models/server-tools") {
+	if r.Method == "PUT" && (p == "/config" || p == "/models" || p == "/models/reasoning" || p == "/models/server-tools" || p == "/models/official-routing") {
 		s.configMu.Lock()
 		defer s.configMu.Unlock()
 	}
@@ -142,6 +142,8 @@ func (s *Service) management(raw json.RawMessage) (any, error) {
 		return managementJSON(200, cfg)
 	case "GET /models":
 		return managementJSON(200, map[string]any{"models": s.config().Models})
+	case "PUT /models/official-routing":
+		return s.saveOfficialRouting(r)
 	case "PUT /models/reasoning":
 		var in struct {
 			Model      string                  `json:"model"`

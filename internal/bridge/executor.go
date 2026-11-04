@@ -93,6 +93,21 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 			gateway["has"] = has
 		}
 	}
+	// This explicit operator switch takes priority over both routing policies.
+	// Build a fresh object per request; no shared config maps are mutated.
+	for _, model := range cfg.Models {
+		if model.ID == alias && model.OfficialRouting && model.UpstreamID == "cline-pass/deepseek-v4.1-flash-1017" {
+			gateway["only"] = []string{"deepseek"}
+			gateway["order"] = []string{"deepseek"}
+			gateway["inferenceRegion"] = map[string]any{
+				"scope": "global",
+				"providers": map[string]any{
+					"openai-compatible-private": map[string]any{"scope": "zone", "geoRegion": "us"},
+				},
+			}
+			break
+		}
+	}
 	// Other provider namespaces in providerOptions must survive, but the
 	// gateway sub-key is owned by this function from here on.
 	opts := object(j["providerOptions"])
