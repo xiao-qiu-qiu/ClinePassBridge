@@ -93,6 +93,7 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 			gateway["has"] = has
 		}
 	}
+	applyOfficialRegion(gateway, cfg, alias)
 	// Other provider namespaces in providerOptions must survive, but the
 	// gateway sub-key is owned by this function from here on.
 	opts := object(j["providerOptions"])

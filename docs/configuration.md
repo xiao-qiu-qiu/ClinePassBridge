@@ -2,6 +2,20 @@
 
 第一次使用请先看 [README](../README.md)。这里介绍日常使用之外的设置和接口。
 
+## DeepSeek 1017 默认 provider 策略
+
+使用默认的「插件配置优先」（`provider_policy: config`），且上游为 `cline-pass/deepseek-v4.1-flash-1017`、允许列表仅为 `["deepseek"]` 时，插件在已解析的 `gateway.only` / `gateway.order` 基础上自动附加：
+
+```json
+{"inferenceRegion":{"scope":"global","providers":{"openai-compatible-private":{"scope":"zone","geoRegion":"us"}}}}
+```
+
+无需独立开关、额外模型字段或客户端参数。首次安装的默认映射满足上述条件；已有相同配置也会自动应用。切换到「客户端优先」（`provider_policy: client`），或清空、修改、扩展允许列表，即退出插件自动区域约束。客户端优先仍透传客户端自己的区域参数，并按原逻辑补齐未设置的允许列表与能力过滤；其他模型不自动注入区域约束。
+
+依据 [Linux.do 2026-11-04 讨论](https://linux.do/t/topic/3119385)，旧能力过滤已不能可靠排除 private。区域约束仍依赖 Cline 当前路由行为，US 用于筛除 private，不代表实际推理位置，也不保证所有账号或未来时段均有效。以正常生成和路由元数据 `finalProvider=deepseek` 验证，不能仅看 HTTP 200、模型名或「降级池」徽章。
+
+旧定制版保存的 `official_routing` 字段不再参与路由，后续通过插件保存配置时会被移除；不再提供该字段的独立管理接口。原有能力预设和其他模型配置继续保留。
+
 ## 登录与数据保存
 
 管理页可以沿用同源 CPA / CPAMP 通过「记住密码」保存的登录信息。管理中心跨域或没有保存登录信息时，输入当前入口的管理密钥：直连 CPA 使用 CPA 管理密钥，经 CPAMP 完整模式访问则使用该面板的管理密钥。
