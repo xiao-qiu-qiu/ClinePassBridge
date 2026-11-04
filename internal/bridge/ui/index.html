@@ -628,7 +628,7 @@
     </section>
 
     <section id="pinPanel" role="tabpanel" aria-labelledby="pinTab" hidden>
-      <div class="notice with-action" role="note"><span>DeepSeek 1017 未配置能力过滤时会默认填入两项能力；支持编辑和清空，实际上游以测试为准。</span><button class="button compact" id="openPinEvidence" type="button" data-icon="book">详细证据</button></div>
+      <div class="notice with-action" role="note"><span>11 月 4 日适配：DeepSeek 1017 可开启实验性官方区域路由，所有客户端统一生效。旧能力过滤已不能可靠排除 private，实际上游以请求日志为准。</span><button class="button compact" id="openPinEvidence" type="button" data-icon="book">详细证据</button></div>
       <div class="panel">
         <div class="panel-head"><div><h2>上游策略</h2><p class="panel-hint">选择插件配置与客户端参数的优先级。</p></div><div class="pin-save-feedback"><span class="pin-save-status" id="providerPolicyState" role="status" aria-live="polite">自动保存</span><button class="button compact" id="retryProviderPolicy" type="button" data-icon="refresh" hidden>重试</button></div></div>
         <form class="pin-policy-layout" id="providerPolicyForm">
@@ -942,6 +942,7 @@
   </dialog>
   <dialog class="dialog-wide" id="pinEvidenceDialog" aria-labelledby="pinEvidenceTitle">
     <h2 id="pinEvidenceTitle">钉上游：详细证据</h2>
+    <p><strong>2026-11-04 更新：</strong>下面是历史测试。新讨论报告旧能力过滤已不能排除 private，新增按模型开启的官方区域路由：强制 only/order 为 deepseek，并设置 global + private zone/us。此方法仍是实验性路由约束，开启后需通过实际请求验证；关闭可恢复旧策略。参考：<a href="https://linux.do/t/topic/3119385" target="_blank" rel="noopener noreferrer">11 月 4 日讨论</a>。</p>
     <p>2026-10-23，同一测试账号、相同短文本的 7 次流式请求均正常结束。以下为网关报告的最终提供方。</p>
     <ul>
       <li><strong>DeepSeek 1017 默认 / 仅 only</strong>：均为 <code>openai-compatible-private</code>。</li>
@@ -1625,7 +1626,7 @@
       await loadStatus();
     }
     const modelKey = (model) => JSON.stringify([model.id, model.upstream_id]);
-    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning, model.providers, model.has ?? [], state.config?.provider_policy, model.reasoning_mapping, reasoningMappingRevision]);
+    const modelTestKey = (model, credential = $('modelTestCredential').value, reasoning = $('modelTestReasoning').value) => JSON.stringify([model.id, model.upstream_id, credential, reasoning, model.providers, model.has ?? [], model.official_routing === true, state.config?.provider_policy, model.reasoning_mapping, reasoningMappingRevision]);
     function modelTestHTML(test) {
       if (!test) return '';
       if (test.pending) return '<div class="model-test-result"><span class="subtext" role="status">正在连接 Cline，等待完整响应…</span></div>';
@@ -1838,6 +1839,33 @@
       });
       syncProviderProbeControls();
     }
+    function officialRoutingHTML(model, index) {
+      if (model.upstream_id !== 'cline-pass/deepseek-v4.1-flash-1017') return '';
+      return `<div class="field pin-editor"><button class="button compact pin-official-routing" type="button" data-index="${index}" aria-pressed="${model.official_routing === true}">${model.official_routing ? '关闭官方区域路由' : '开启官方区域路由'}（实验性）</button><div class="subtext">当前${model.official_routing ? '已开启' : '已关闭'}。开启后统一指定 deepseek 并附加区域约束，优先于客户端参数和上游策略；其他模型不受影响。US 用于排除 private，不表示推理位置。请以实际上游验证，关闭可恢复原策略。</div></div>`;
+    }
+    async function toggleOfficialRouting(model) {
+      if (state.modelBusy || reasoningMappingBusy) return;
+      if (!await flushPinModels()) return;
+      if (state.modelBusy) return;
+      model = state.models.find((item) => item.id === model.id && item.upstream_id === model.upstream_id);
+      if (!model) return;
+      state.modelBusy = true;
+      renderPinModelRows();
+      pinSaveState('pinModelsState', '正在保存官方区域路由…', 'saving');
+      try {
+        const enabled = !model.official_routing;
+        const saved = await api('/models/official-routing', { method: 'PUT', body: { model: model.id, upstream_id: model.upstream_id, enabled } });
+        const current = saved?.models?.find((item) => item.id === model.id && item.upstream_id === model.upstream_id);
+        if (!current || (current.official_routing === true) !== enabled) throw new Error('服务端未确认路由开关，请刷新核对');
+        renderModels(saved);
+        pinSaveState('pinModelsState', '官方区域路由已保存', 'saved');
+      } catch (error) {
+        pinSaveState('pinModelsState', `保存失败：${error.message}；请再次点击路由开关重试`, 'idle');
+      } finally {
+        state.modelBusy = false;
+        renderPinModelRows();
+      }
+    }
     function renderPinModelRows() {
       $('pinModelList').innerHTML = state.models.length ? state.models.map((model, index) => {
         const value = pinAutosave.drafts.get(modelKey(model)) ?? model.providers.join(', ');
@@ -1845,7 +1873,7 @@
         const hasValue = pinAutosave.hasDrafts.get(modelKey(model)) ?? (model.has || []).join(', ');
         const capabilities = parseHas(hasValue);
         const preset = deepseekPinPreset(model) ? `<button class="button compact pin-deepseek-preset" type="button" data-index="${index}" title="将允许列表设为 deepseek，能力过滤设为 vision, implicit-caching，并自动保存">${buttonIcon('pin')}应用 DeepSeek 预设</button>` : '';
-        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><span class="badge pin-routing-badge ${providers.length ? 'good' : ''}">${providers.length > 1 ? '白名单' : providers.length ? '已固定' : '自动路由'}</span><div class="row-actions"><button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 可钉上游`)}" aria-controls="pinProbeResult-${esc(index)}">${buttonIcon('search')}探测可钉上游</button><button class="button compact pin-test-model" type="button" data-index="${index}" aria-label="${esc(`测试 ${model.id}`)}" aria-controls="pinModelTest-${index}" title="使用当前所选凭据测试模型，测试前会先完成自动保存">${buttonIcon('test')}测试模型</button></div><div class="field pin-editor"><label for="pinProviders-${esc(index)}">允许的上游</label><input class="control mono" id="pinProviders-${esc(index)}" data-index="${esc(index)}" data-model-key="${esc(modelKey(model))}" value="${esc(value)}" autocomplete="off" spellcheck="false" aria-describedby="pinInputHint pinSemantics"><div id="pinProbeResult-${esc(index)}" role="status" aria-live="polite">${providerProbeHTML(model)}</div></div><div class="field pin-editor"><div class="pin-editor-heading"><label for="pinHas-${esc(index)}">能力过滤（可选）</label>${preset}</div><input class="control mono" id="pinHas-${esc(index)}" data-index="${esc(index)}" data-has-key="${esc(modelKey(model))}" value="${esc(hasValue)}" placeholder="如 vision, implicit-caching" autocomplete="off" spellcheck="false" aria-describedby="pinHasHint pinSemantics"><div class="subtext pin-has-badge ${capabilities.length ? 'good' : ''}" id="pinHasBadge-${esc(index)}">${capabilities.length ? `能力：${esc(capabilities.join(', '))}` : '未设置能力过滤'}</div></div><div class="pin-model-test" id="pinModelTest-${index}" role="status" aria-live="polite"></div></div>`;
+        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div><span class="badge pin-routing-badge ${providers.length ? 'good' : ''}">${providers.length > 1 ? '白名单' : providers.length ? '已固定' : '自动路由'}</span><div class="row-actions"><button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 可钉上游`)}" aria-controls="pinProbeResult-${esc(index)}">${buttonIcon('search')}探测可钉上游</button><button class="button compact pin-test-model" type="button" data-index="${index}" aria-label="${esc(`测试 ${model.id}`)}" aria-controls="pinModelTest-${index}" title="使用当前所选凭据测试模型，测试前会先完成自动保存">${buttonIcon('test')}测试模型</button></div><div class="field pin-editor"><label for="pinProviders-${esc(index)}">允许的上游</label><input class="control mono" id="pinProviders-${esc(index)}" data-index="${esc(index)}" data-model-key="${esc(modelKey(model))}" value="${esc(value)}" autocomplete="off" spellcheck="false" aria-describedby="pinInputHint pinSemantics"><div id="pinProbeResult-${esc(index)}" role="status" aria-live="polite">${providerProbeHTML(model)}</div></div><div class="field pin-editor"><div class="pin-editor-heading"><label for="pinHas-${esc(index)}">能力过滤（可选）</label>${preset}</div><input class="control mono" id="pinHas-${esc(index)}" data-index="${esc(index)}" data-has-key="${esc(modelKey(model))}" value="${esc(hasValue)}" placeholder="如 vision, implicit-caching" autocomplete="off" spellcheck="false" aria-describedby="pinHasHint pinSemantics"><div class="subtext pin-has-badge ${capabilities.length ? 'good' : ''}" id="pinHasBadge-${esc(index)}">${capabilities.length ? `能力：${esc(capabilities.join(', '))}` : '未设置能力过滤'}</div></div>${officialRoutingHTML(model, index)}<div class="pin-model-test" id="pinModelTest-${index}" role="status" aria-live="polite"></div></div>`;
       }).join('') : '<div class="empty"><strong>暂无模型映射</strong>请前往模型映射标签添加模型。</div>';
       syncProviderProbeControls();
       syncPinModelTests();
@@ -1905,6 +1933,12 @@
     });
     $('pinProbeCredential').addEventListener('change', () => { syncProviderProbeResults(); syncPinModelTests(); });
     $('pinModelList').addEventListener('click', async (event) => {
+      const official = event.target.closest('.pin-official-routing');
+      if (official) {
+        const model = state.models[Number(official.dataset.index)];
+        if (model && !official.disabled) await toggleOfficialRouting(model);
+        return;
+      }
       const preset = event.target.closest('.pin-deepseek-preset');
       if (preset) {
         if (state.modelBusy && !pinAutosave.flight) return;
@@ -2569,7 +2603,7 @@
       const next = state.models.map((model) => ({ ...model }));
       const existing = state.models[state.editingModelIndex];
       const item = { ...existing, id, upstream_id, providers: existing ? [...existing.providers] : [] };
-      if (existing && existing.upstream_id !== upstream_id) delete item.reasoning_mapping;
+      if (existing && existing.upstream_id !== upstream_id) { delete item.reasoning_mapping; delete item.official_routing; }
       if (state.editingModelIndex < 0) next.push(item); else next[state.editingModelIndex] = item;
       state.modelBusy = true;
       $('saveModel').disabled = true;
