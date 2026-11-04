@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const Version = "0.4.3"
+const Version = "0.4.4"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
@@ -132,6 +132,8 @@ type Model struct {
 	ReasoningMapping *ReasoningMappingConfig `json:"reasoning_mapping,omitempty" yaml:"reasoning_mapping,omitempty"`
 	ID               string                  `json:"id" yaml:"id"`
 	UpstreamID       string                  `json:"upstream_id" yaml:"upstream_id"`
+	RoutingMode      string                  `json:"routing_mode,omitempty" yaml:"routing_mode,omitempty"`
+	ProviderOptions  map[string]any          `json:"provider_options,omitempty" yaml:"provider_options,omitempty"`
 	Providers        []string                `json:"providers" yaml:"providers"`
 	// Has is the gateway capability filter (e.g. vision, implicit-caching).
 	// It is filled in only when the caller sent none, so a client that knows
@@ -178,7 +180,9 @@ func decodeConfigJSON(raw []byte, cfg *Config) error {
 			next.ServerTools = nil
 		}
 	}
-	if err := json.Unmarshal(raw, &next); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&next); err != nil {
 		return err
 	}
 	*cfg = next
@@ -222,6 +226,9 @@ func (c *Config) validate() error {
 	seen := map[string]bool{}
 	for i := range c.Models {
 		m := &c.Models[i]
+		if err := m.validateRouting(); err != nil {
+			return err
+		}
 		if strings.TrimSpace(m.ID) == "" || seen[m.ID] {
 			return fail(400, "model aliases must be nonempty and unique")
 		}
@@ -242,7 +249,7 @@ func (c *Config) validate() error {
 		// A fresh install pins DeepSeek models to the vendor's own endpoint.
 		// An explicit empty list means the operator cleared it, so only a
 		// never-set field is defaulted.
-		if m.Providers == nil {
+		if m.Providers == nil && m.RoutingMode != RoutingModeCustom {
 			m.Providers = defaultProvidersFor(m.ID, m.UpstreamID)
 		}
 		if len(m.Providers) > maxModelProviders {
@@ -262,7 +269,7 @@ func (c *Config) validate() error {
 		}
 		// Seed only never-set capability filters for this exact upstream model.
 		// Explicit [] and custom values remain operator overrides on every load.
-		if m.Has == nil {
+		if m.Has == nil && m.RoutingMode != RoutingModeCustom {
 			m.Has = defaultHasFor(m.UpstreamID)
 		}
 		if len(m.Has) > maxModelHas {

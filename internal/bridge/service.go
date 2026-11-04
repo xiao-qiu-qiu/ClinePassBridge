@@ -79,6 +79,7 @@ func (s *Service) config() Config {
 	}
 	c.Models = append([]Model{}, c.Models...)
 	for i := range c.Models {
+		c.Models[i].ProviderOptions = cloneProviderOptions(c.Models[i].ProviderOptions)
 		if c.Models[i].ReasoningMapping != nil {
 			mapping := c.Models[i].ReasoningMapping.clone()
 			c.Models[i].ReasoningMapping = &mapping

@@ -1,11 +1,12 @@
 # 上游能力过滤（has）
 
-想让 `cline-pass/deepseek-v4.1-flash-1017` 请求由 DeepSeek 提供，可以同时配置：
+`has` 按能力标签筛选候选，本身不指定提供方。当前 `cline-pass/deepseek-v4.1-flash-1017` 默认官方路由使用：
 
 - `only: ["deepseek"]`：提供方允许列表，限定公开候选路由中的 provider。
 - `has: ["vision", "implicit-caching"]`：要求候选满足这些能力标签。
+- `inferenceRegion`：全局范围，并将 `openai-compatible-private` 限为 `zone/us`，用于筛除私有通道。
 
-两者作用不同。2026-10-23 的单账号实测中，仅 `only` 仍落私有通道，仅 `has` 则落到 `fireworks`；组合使用才得到 `finalProvider=deepseek`。因此，指定 DeepSeek 时应一起设置，能力过滤本身不指定提供方。
+旧的 `only + has` 组合已不能可靠固定官方。2026-11-04 同凭据对照中，旧组合仍命中 private，加入区域规则后连续两次由 `deepseek` 正常回复 `OK`。下面的 2026-10-23 表格保留原始结果，其组合足以固定官方的结论已失效。`us` 是这里的筛选参数，不代表实际推理位置。
 
 ## 在插件中设置
 
@@ -13,23 +14,33 @@
 
 升级后，已有 1017 映射如果此前未配置能力，后续请求会开始带上这两项能力条件；已有提供方列表不因此改写。显式保存 `has: []` 可关闭默认能力，自定义的非空列表也原样保留。其他上游模型不补能力默认值。这是可覆盖的模型默认值，最终提供方仍以实际请求结果为准。
 
-在「钉上游」页可以自由编辑这两项。清空后想恢复组合，可点击「应用 DeepSeek 预设」，同时填入提供方 `deepseek` 和两项能力。界面会自动保存，看到「已保存」后再探测或测试。预设不修改模型 ID；详细配置和客户端优先级见[进阶配置](configuration.md#能力过滤has)。
+在「钉上游」模型行的「编辑参数」中可编辑预设，或切换到自定义 JSON。预设模式下，只有「插件配置优先」、精确 1017 上游 ID、允许列表仅为 `["deepseek"]` 时才自动附加区域规则；清空能力条件不会关闭区域规则。切换客户端优先、清空或更改允许列表、改用其他上游 ID，都退出自动区域规则。
+
+自定义模式直接使用 `provider_options` 对象，不自动补 `only`、`has` 或区域规则。JSON 不包外层 `providerOptions`；切回预设会保留该 JSON。配置优先完全采用配置 JSON，客户端优先则以配置为默认递归合并客户端覆盖，`null` 和 `[]` 也能覆盖，其他命名空间保留合并。字段说明见[模型级自定义参数](configuration.md#模型级自定义参数)。
 
 「探测可钉上游」按已保存的能力条件发起小请求，同时移除提供方允许列表、顺序等其他路由选项，读取符合这些能力条件的候选。候选为空只表示上游没有列出候选；最终保存的组合是否命中 DeepSeek，请通过「测试模型」或正式请求的「实际上游」确认。
 
 ## 请求形态
 
-`has` 写在请求体顶层的 `providerOptions.gateway` 中：
+`has` 和区域规则都写在请求体的 `providerOptions.gateway` 中。下面展示当前 1017 预设的路由字段：
 
 ```json
 {
   "model": "cline-pass/deepseek-v4.1-flash-1017",
   "messages": [{ "role": "user", "content": "只回复 OK" }],
   "stream": true,
+  "provider": {"only": ["deepseek"], "order": ["deepseek"]},
   "providerOptions": {
     "gateway": {
       "only": ["deepseek"],
-      "has": ["vision", "implicit-caching"]
+      "order": ["deepseek"],
+      "has": ["vision", "implicit-caching"],
+      "inferenceRegion": {
+        "scope": "global",
+        "providers": {
+          "openai-compatible-private": {"scope": "zone", "geoRegion": "us"}
+        }
+      }
     }
   }
 }
@@ -42,9 +53,11 @@
 
 标签用于候选匹配；这次文本请求实验没有验证图片输入或缓存效果。插件不校验上游是否支持某个标签，拼写或组合不匹配可能导致没有可用候选。
 
-插件把最终的 `only/order` 同时写入顶层 `provider` 和 `providerOptions.gateway`，兼容不同路由路径；`has` 只写入 `providerOptions.gateway`。下面 G 组验证了这种双字段形态可以与能力组合共同使用。
+预设模式把最终的 `only/order` 同时写入顶层 `provider` 和 `providerOptions.gateway`，兼容不同路由路径；`has` 与 `inferenceRegion` 只写入 `providerOptions.gateway`。
 
-## 七组实测：2026-10-23
+## 七组实测：2026-10-23（历史，旧结论已失效）
+
+以下参数、结果和耗时保留当日记录，不作为当前固定官方的配置建议。
 
 北京时间 22:16–22:19，使用同一账号、同一网络路径，直接请求 Cline `/api/v1/chat/completions`。全部为同一句短文本，`stream=true`、`stream_options.include_usage=true`、`max_tokens=64`，顺序执行且没有自动重试。表中的模型均带 `cline-pass/` 前缀。
 
@@ -60,18 +73,18 @@
 
 七组均 HTTP 200、SSE 含 `[DONE]`、`finish_reason=stop`，没有 SSE JSON 解析错误。G 是按插件请求构造方式直连上游的对照，不等于已部署插件的端到端验证。
 
-这组结果支持在该账号和时段使用 `-1017` 模型的组合参数；无后缀模型当时仍落私有通道。它不代表所有账号、其他模型或后续时段的路由都会相同，也没有验证非流式行为。
+这组结果只说明当日账号与时段中 `-1017` 的组合参数命中了官方；2026-11-04 的对照已发现旧组合仍落私有通道。无后缀模型在旧实验中也仍落私有通道，没有验证非流式行为。
 
 ## 如何读路由结果
 
-最终提供方看响应的 `provider_metadata.gateway.routing.finalProvider`；本轮流式字段位于 `choices[0].delta` 下，插件在日志中显示为「实际上游」。
+最终提供方看响应的 `provider_metadata.gateway.routing.finalProvider`；历史实验的流式字段位于 `choices[0].delta` 下，插件在日志中显示为「实际上游」。以下细节均描述旧实验：
 
 - C 组的 `canonicalSlug` 已是 `deepseek/deepseek-v4.1-flash-1017`，但 `finalProvider=fireworks`。模型名中的 DeepSeek 不等于最终提供方是 DeepSeek。
 - D/E/G 的规划摘要包含 `Provider set restricted to: deepseek`，最终提供方也都是 `deepseek`。这条公开候选路由会应用 `only` 的提供方限制。
 - C/D/E/G 的 `modelAttemptCount=2`，但私有模型条目为 `success=false`、`providerAttemptCount=0`、`providerAttempts=[]`；公开模型只有一次提供方尝试。两个模型条目不等于向两家供应商各发送了一次请求。
 - `affinity.outcome` 在成功组间也不同。本功能限制单次请求的路由，不代表永久绑定账号或会话。
 
-元数据支持“能力条件改变了候选路由，提供方列表进一步限制选择”的解释；网关内部过滤与规划的具体顺序仍属于推断。
+旧元数据支持“能力条件改变了候选路由，提供方列表进一步限制选择”的解释；网关内部过滤与规划的具体顺序仍属于推断。当前确认官方路由，应同时检查正常生成与 `finalProvider=deepseek`。
 
 ## 费用和失败
 
@@ -81,7 +94,7 @@
 
 ## 客户端直接传字段
 
-客户端能够传递扩展请求体时，也可以直接设置这组参数。经插件调用时先选择「客户端优先」；默认的「插件配置优先」会使用模型配置中的路由条件。
+客户端能够传递扩展请求体时，可直接设置区域规则。经插件调用时先选择「客户端优先」；该策略不自动附加区域规则，需要客户端明确发送。默认的「插件配置优先」采用模型配置。
 
 例如 OpenAI Python SDK 的扩展字段写法：
 
@@ -95,10 +108,18 @@ client.chat.completions.create(
             "gateway": {
                 "only": ["deepseek"],
                 "has": ["vision", "implicit-caching"],
+                "inferenceRegion": {
+                    "scope": "global",
+                    "providers": {
+                        "openai-compatible-private": {
+                            "scope": "zone", "geoRegion": "us"
+                        }
+                    },
+                },
             }
         }
     },
 )
 ```
 
-「客户端优先」按字段保留客户端值，缺少的字段才用经过默认值处理的模型配置补齐；客户端显式发送 `has: []` 或 `has: null` 也会原样保留，不补默认能力。
+这里是客户端请求，所以需要外层 `providerOptions`；模型自定义 JSON 编辑框则从 `gateway` 那层开始填。预设模式的「客户端优先」按字段保留客户端值，缺少的字段用模型预设补齐；`has: []` 或 `has: null` 原样保留。自定义模式则递归合并整份 `providerOptions`，同名值由客户端覆盖，包括 `null`、`[]`，其他命名空间也参与合并。

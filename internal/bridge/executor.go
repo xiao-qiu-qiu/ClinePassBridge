@@ -59,16 +59,23 @@ func (s *Service) prepareWithCredential(r ExecutorRequest, c Credential) (map[st
 // upstream request paths read provider, while others read providerOptions.gateway.
 func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 	cfg := s.config()
+	for _, model := range cfg.Models {
+		if model.ID == alias && model.RoutingMode == RoutingModeCustom {
+			applyCustomProviderRouting(j, model.ProviderOptions, cfg.ProviderPolicy)
+			return
+		}
+	}
 	pinned := cfg.pinnedProviders(alias)
+	opts := cloneProviderOptions(object(j["providerOptions"]))
 	// Merge caller hints before applying the configured policy. Gateway fields
 	// take precedence over the top-level shorthand when both are present.
 	gateway := map[string]any{}
-	for k, v := range object(object(j["providerOptions"])["gateway"]) {
+	for k, v := range object(opts["gateway"]) {
 		gateway[k] = v
 	}
 	for k, v := range object(j["provider"]) {
 		if _, ok := gateway[k]; !ok {
-			gateway[k] = v
+			gateway[k] = cloneProviderValue(v)
 		}
 	}
 	delete(j, "provider")
@@ -96,7 +103,6 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 	applyOfficialRegion(gateway, cfg, alias)
 	// Other provider namespaces in providerOptions must survive, but the
 	// gateway sub-key is owned by this function from here on.
-	opts := object(j["providerOptions"])
 	if opts != nil {
 		delete(opts, "gateway")
 	}

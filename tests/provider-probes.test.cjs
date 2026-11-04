@@ -163,7 +163,7 @@ test('预设按钮只出现在上游 ID 精确为 DeepSeek 1017 的行，客户�
     { id: 'other', upstream_id: 'cline-pass/deepseek-v4.1-flash-1017-extra', providers: [] },
   ];
   view.ui.renderPinModelRows();
-  const rows = view.node('pinModelList').innerHTML.split('<div class="model-row">').slice(1);
+  const rows = view.node('pinModelList').innerHTML.split(/<div class="model-row"[^>]*>/).slice(1);
   assert.equal(rows.length, 3);
   assert.match(rows[0], /pin-deepseek-preset/);
   assert.doesNotMatch(rows[1], /pin-deepseek-preset/);

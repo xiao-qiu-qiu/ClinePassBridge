@@ -4,15 +4,15 @@
 
 ## DeepSeek 1017 默认 provider 策略
 
-使用默认的「插件配置优先」（`provider_policy: config`），且上游为 `cline-pass/deepseek-v4.1-flash-1017`、允许列表仅为 `["deepseek"]` 时，插件在已解析的 `gateway.only` / `gateway.order` 基础上自动附加：
+使用预设模式（`routing_mode: preset`，缺失也按预设处理）和默认的「插件配置优先」（`provider_policy: config`），且上游 ID 精确为 `cline-pass/deepseek-v4.1-flash-1017`、允许列表仅为 `["deepseek"]` 时，插件在已解析的 `gateway.only` / `gateway.order` 基础上自动附加：
 
 ```json
 {"inferenceRegion":{"scope":"global","providers":{"openai-compatible-private":{"scope":"zone","geoRegion":"us"}}}}
 ```
 
-无需独立开关、额外模型字段或客户端参数。首次安装的默认映射满足上述条件；已有相同配置也会自动应用。切换到「客户端优先」（`provider_policy: client`），或清空、修改、扩展允许列表，即退出插件自动区域约束。客户端优先仍透传客户端自己的区域参数，并按原逻辑补齐未设置的允许列表与能力过滤；其他模型不自动注入区域约束。
+首次安装的默认映射满足上述条件；已有相同配置也会自动应用。切换到自定义模式或「客户端优先」（`provider_policy: client`），或清空、修改、扩展允许列表，即退出插件自动区域约束；其他上游 ID 不自动附加。只清空或修改 `has` 不会关闭该区域规则。预设模式的客户端优先仍保留客户端区域参数，并补齐未设置的允许列表与能力过滤。
 
-依据 [Linux.do 2026-11-04 讨论](https://linux.do/t/topic/3119385)，旧能力过滤已不能可靠排除 private。区域约束仍依赖 Cline 当前路由行为，US 用于筛除 private，不代表实际推理位置，也不保证所有账号或未来时段均有效。以正常生成和路由元数据 `finalProvider=deepseek` 验证，不能仅看 HTTP 200、模型名或「降级池」徽章。
+2026-11-04 的同凭据对照中，旧 `only + has` 仍命中 private；加入上述区域规则后，连续两次由 `deepseek` 正常回复 `OK`。`us` 在这里用于筛除 private，不代表实际推理位置。验证时同时看正常生成和路由元数据 `finalProvider=deepseek`；HTTP 200、模型名或「降级池」徽章不能单独证明命中官方。
 
 旧定制版保存的 `official_routing` 字段不再参与路由，后续通过插件保存配置时会被移除；不再提供该字段的独立管理接口。原有能力预设和其他模型配置继续保留。
 
@@ -42,11 +42,11 @@
 
 插件只接受已配置的客户端模型名称。上游 ID 不会自动成为另一个可调用名称；需要直接用上游 ID 调用时，添加一条同名映射。升级会保留已有映射，删除或清空后也不会自动补回。
 
-首次安装默认包含 `deepseek-v4.1-flash-1017` → `cline-pass/deepseek-v4.1-flash-1017` 映射，提供方允许列表默认填入 `deepseek`，能力默认使用 `vision,implicit-caching`。「获取上游模型」的候选列表直接读取 Cline 上游目录。1017 与老模型使用不同的上游 ID，已有用户需要自行勾选导入或手动添加映射。
+首次安装只默认包含 `deepseek-v4.1-flash-1017` → `cline-pass/deepseek-v4.1-flash-1017` 映射，提供方允许列表默认填入 `deepseek`，能力默认使用 `vision,implicit-caching`，并应用上述区域规则。「获取上游模型」的候选列表直接读取 Cline 上游目录，其他模型按需添加。1017 与老模型使用不同的上游 ID，已有用户需要自行勾选导入或手动添加映射。
 
 模型通过 CPA 的账号绑定路径注册。所有 Cline Pass 账号禁用后，对应模型会从 CPA 的 `/v1/models` 移除；重新启用账号后，由 CPA 恢复注册。模型出现在列表中不代表上游请求一定成功，实际可用性仍受账号额度、冷却和上游状态影响。
 
-在「钉上游」页可集中编辑各模型的 provider 允许列表：
+「钉上游」按上游 ID 将 DeepSeek 系列置顶，不改变已有模型映射。在每个模型行的「编辑参数」对话框中选择预设或自定义模式。预设模式的 provider 允许列表含义如下：
 
 - 留空：不限制提供方，由网关在符合能力条件的候选中路由。
 - 只填一家：限制为该 provider；在应用允许列表的路由路径中，没有匹配的可用候选时请求会失败。
@@ -58,11 +58,47 @@ DeepSeek 模型首次设置时默认填入 `deepseek`，其他模型保持自动
 
 「探测可钉上游」会按已保存的能力条件发一个很小的模型请求，从返回的路由信息中读取候选。探测时保留最终的 `has`，移除顶层 `provider` 和 gateway 中的其他路由选项（包括 `only/order`），让现有提供方限制不影响候选列表。结果与凭据、模型和探测时段有关；空列表仅表示上游未列出候选，仍可手动填写并通过「测试模型」确认。
 
-provider 策略默认是「插件配置优先」，客户端传入的路由条件会被忽略，由模型配置生成。选择「客户端优先」后，客户端传入的字段优先生效，缺少的字段由插件配置补齐。最终的 `only` 允许列表与 `order` 顺序提示会同时写入 `provider` 和 `providerOptions.gateway`，兼容读取不同路由字段的上游路径；`has` 只写入 `providerOptions.gateway`。
+预设模式的 provider 策略默认是「插件配置优先」，客户端传入的 gateway 路由条件会被忽略，由模型配置生成。选择「客户端优先」后，客户端传入的字段优先生效，缺少的字段由插件配置补齐。最终的 `only` 允许列表与 `order` 顺序提示会同时写入 `provider` 和 `providerOptions.gateway`，兼容读取不同路由字段的上游路径；`has` 只写入 `providerOptions.gateway`。
+
+### 模型级自定义参数
+
+`routing_mode` 支持 `preset` / `custom`，缺失时为 `preset`。`provider_options` 必须是 JSON 对象，内容直接对应请求的 `providerOptions`，不要再包一层同名字段。切回预设后，自定义 JSON 会保留，再切回自定义即可继续使用。
+
+自定义模式不自动加入 `only`、`order`、`has` 或 1017 区域规则，保存的提供方与能力预设也不参与请求构造：
+
+| provider 策略 | 自定义模式行为 |
+| --- | --- |
+| `config`（插件配置优先） | 完全使用配置中的 `provider_options`，忽略客户端参数 |
+| `client`（客户端优先） | 以配置为默认值，递归合并客户端 `providerOptions`；同名值由客户端覆盖 |
+
+客户端的 `null`、`[]` 会覆盖配置值，不会被默认值补回；对象逐层合并，其他命名空间也保留并参与合并。比如配置有 `gateway.only`、`gateway.inferenceRegion` 和 `deepseek`，客户端只发 `gateway.has: []`，会保留前两项与 `deepseek`，并将 `has` 设为空数组。
+
+下面是模型配置示例；在对话框中只需填写 `provider_options` 的值，也就是以 `gateway` 开头的对象：
+
+```json
+{
+  "id": "deepseek-v4.1-flash-1017",
+  "upstream_id": "cline-pass/deepseek-v4.1-flash-1017",
+  "routing_mode": "custom",
+  "provider_options": {
+    "gateway": {
+      "only": ["deepseek"],
+      "inferenceRegion": {
+        "scope": "global",
+        "providers": {
+          "openai-compatible-private": {"scope": "zone", "geoRegion": "us"}
+        }
+      }
+    }
+  }
+}
+```
+
+客户端直接传区域规则的请求示例见[上游能力过滤](upstream-capability-filter.md#客户端直接传字段)。
 
 ### 能力过滤（has）
 
-`only` 限制提供方，`has` 按能力标签过滤候选。2026-10-23 对 `cline-pass/deepseek-v4.1-flash-1017` 的单账号实测中，仅 `only=[deepseek]` 仍落私有通道，仅 `has=[vision,implicit-caching]` 落到 `fireworks`，两者组合才得到 `finalProvider=deepseek`。指定 DeepSeek 时请一起设置；无后缀模型在该轮实验中仍落私有通道。完整七组对照和适用边界见[上游能力过滤](upstream-capability-filter.md)。
+以下为预设模式的能力配置。`only` 限制提供方，`has` 按能力标签过滤候选；旧的 `only + has` 官方路由结论已失效，当前 1017 预设还需要上述区域规则。2026-10-23 的七组对照保留在[上游能力过滤](upstream-capability-filter.md)中，作为历史证据。
 
 能力默认值按精确的上游 ID 判断，与客户端别名无关：
 
