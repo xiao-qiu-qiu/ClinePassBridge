@@ -2,6 +2,22 @@
 
 第一次使用请先看 [README](../README.md)。这里介绍日常使用之外的设置和接口。
 
+## DeepSeek 1017 官方区域路由（实验性）
+
+在「钉上游」的 DeepSeek 1017 行提供「开启官方区域路由（实验性）」按钮，自动保存并对后续请求生效，客户端无需改参数。默认关闭，其他模型不显示该按钮。
+
+按模型保存 `official_routing: true`，仅适用于 `cline-pass/deepseek-v4.1-flash-1017`。开启后，无论 `provider_policy` 为 `client` 还是 `config`，插件都将最终 `gateway.only` / `gateway.order` 设为 `["deepseek"]`，并附加：
+
+```json
+{"inferenceRegion":{"scope":"global","providers":{"openai-compatible-private":{"scope":"zone","geoRegion":"us"}}}}
+```
+
+其他 providerOptions 命名空间和模型字段继续保留。关闭开关后恢复原上游策略，原有客户端参数仍按原策略处理。修改模型上游 ID 时，管理页清除这个开关；API 不允许为其他模型开启。
+
+管理 API：`PUT /v0/management/clinepassbridge/models/official-routing`，请求体为 `{"model":"客户端别名","upstream_id":"cline-pass/deepseek-v4.1-flash-1017","enabled":true}`；`enabled:false` 关闭。接口按别名和上游 ID 检查过期编辑，保存到插件原有 settings.json，不需重启 CPA。
+
+依据 [Linux.do 2026-11-04 讨论](https://linux.do/t/topic/3119385)，旧能力过滤已不能可靠排除 private。区域约束是实验方案；US 用于筛除 private，不代表实际推理位置，不保证服务端未来仍遵循。以正常生成和路由元数据 finalProvider 为 deepseek 验证，不能仅看 HTTP 200 或 model 字段。下文的旧能力预设相关说明保留为原功能说明。
+
 ## 登录与数据保存
 
 管理页可以沿用同源 CPA / CPAMP 通过「记住密码」保存的登录信息。管理中心跨域或没有保存登录信息时，输入当前入口的管理密钥：直连 CPA 使用 CPA 管理密钥，经 CPAMP 完整模式访问则使用该面板的管理密钥。
