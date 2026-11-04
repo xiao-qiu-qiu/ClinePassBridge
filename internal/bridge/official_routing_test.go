@@ -3,96 +3,71 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
 )
 
-func TestOfficialRoutingOverridesCallerForBothPolicies(t *testing.T) {
-	for _, policy := range []string{"config", "client"} {
-		t.Run(policy, func(t *testing.T) {
-			cfg := fmt.Sprintf("data_dir: %q\nprovider_policy: %s\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n  official_routing: true\n  providers: [alibaba]\n", t.TempDir(), policy)
+func TestOfficialRoutingFollowsProviderPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, policy, upstream, providers string
+		want                              bool
+	}{
+		{"default-official", "config", "cline-pass/deepseek-v4.1-flash-1017", "[deepseek]", true},
+		{"default-install", "", "cline-pass/deepseek-v4.1-flash-1017", "null", true},
+		{"client", "client", "cline-pass/deepseek-v4.1-flash-1017", "[deepseek]", false},
+		{"automatic", "config", "cline-pass/deepseek-v4.1-flash-1017", "[]", false},
+		{"other-provider", "config", "cline-pass/deepseek-v4.1-flash-1017", "[alibaba]", false},
+		{"multiple", "config", "cline-pass/deepseek-v4.1-flash-1017", "[deepseek, alibaba]", false},
+		{"other-model", "config", "cline-pass/glm-5.3-flash", "[deepseek]", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := fmt.Sprintf("data_dir: %q\nprovider_policy: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: %s\n  providers: %s\n", t.TempDir(), tc.policy, tc.upstream, tc.providers)
 			s, err := registerService(t, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}],"providerOptions":{"gateway":{"only":["novita"],"order":["novita"],"inferenceRegion":{"scope":"zone","geoRegion":"cn"}},"deepseek":{"reasoningEffort":"max"}}}`)
+			body := upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}],"providerOptions":{"gateway":{"only":["novita"]},"deepseek":{"reasoningEffort":"max"}}}`)
 			gateway := object(object(body["providerOptions"])["gateway"])
-			want := `{"scope":"global","providers":{"openai-compatible-private":{"scope":"zone","geoRegion":"us"}}}`
-			var region any
-			_ = json.Unmarshal([]byte(want), &region)
-			if !reflect.DeepEqual(gateway["inferenceRegion"], region) {
-				t.Fatalf("wrong region: %s", jsonBytes(gateway))
+			if (gateway["inferenceRegion"] != nil) != tc.want {
+				t.Fatalf("region mismatch: %s", jsonBytes(gateway))
 			}
-			for _, route := range []map[string]any{gateway, object(body["provider"])} {
-				for _, key := range []string{"only", "order"} {
-					if string(jsonBytes(route[key])) != `["deepseek"]` {
-						t.Fatalf("wrong %s: %s", key, jsonBytes(route))
+			if tc.want {
+				region := object(gateway["inferenceRegion"])
+				private := object(object(region["providers"])["openai-compatible-private"])
+				if str(region["scope"]) != "global" || str(private["scope"]) != "zone" || str(private["geoRegion"]) != "us" {
+					t.Fatalf("wrong region: %s", jsonBytes(region))
+				}
+				for _, route := range []map[string]any{gateway, object(body["provider"])} {
+					for _, key := range []string{"only", "order"} {
+						if string(jsonBytes(route[key])) != `["deepseek"]` {
+							t.Fatalf("wrong %s: %s", key, jsonBytes(route))
+						}
 					}
 				}
 			}
+			if tc.policy == "client" && string(jsonBytes(gateway["only"])) != `["novita"]` {
+				t.Fatal("client preference lost")
+			}
 			if str(object(object(body["providerOptions"])["deepseek"])["reasoningEffort"]) != "max" {
-				t.Fatal("lost other namespace")
+				t.Fatal("other namespace lost")
 			}
 		})
 	}
 }
-
-func TestOfficialRoutingManagementPersistsAndDisables(t *testing.T) {
-	dir := t.TempDir()
-	cfg := fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", dir)
-	s, err := registerService(t, cfg)
+func TestOfficialRoutingClientRegionPreserved(t *testing.T) {
+	s, err := registerService(t, fmt.Sprintf("data_dir: %q\nprovider_policy: client\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, enabled := range []bool{true, false} {
-		body := []byte(fmt.Sprintf(`{"model":"deepseek-flash","upstream_id":"cline-pass/deepseek-v4.1-flash-1017","enabled":%t}`, enabled))
-		observabilityManagement(t, s, "PUT", "/models/official-routing", nil, body, 200)
-		reloaded, err := registerService(t, cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		actual := upstreamBodyOf(t, reloaded, `{"messages":[{"role":"user","content":"hello"}]}`)
-		gateway := object(object(actual["providerOptions"])["gateway"])
-		if (gateway["inferenceRegion"] != nil) != enabled {
-			t.Fatalf("enabled=%t region=%v", enabled, gateway["inferenceRegion"])
-		}
-		s = reloaded
+	body := upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}],"providerOptions":{"gateway":{"inferenceRegion":{"scope":"zone","geoRegion":"eu"}}}}`)
+	region := object(object(object(body["providerOptions"])["gateway"])["inferenceRegion"])
+	if str(region["geoRegion"]) != "eu" {
+		t.Fatalf("client region changed: %s", jsonBytes(region))
 	}
 }
-
-func TestOfficialRoutingRejectsStaleAndMalformedUpdates(t *testing.T) {
-	s, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		body   string
-		status int
-	}{
-		{`{"model":"deepseek-flash","upstream_id":"old","enabled":true}`, 409},
-		{`{"model":"missing","upstream_id":"old","enabled":true}`, 404},
-		{`{"model":"deepseek-flash","upstream_id":"cline-pass/deepseek-v4.1-flash-1017"}`, 400},
-		{`{"model":"deepseek-flash","enabled":"true"}`, 400},
-	} {
-		observabilityManagement(t, s, "PUT", "/models/official-routing", nil, []byte(tc.body), tc.status)
-	}
-	gateway := object(object(object(upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}]}`))["providerOptions"])["gateway"])
-	if gateway["inferenceRegion"] != nil {
-		t.Fatal("rejected update enabled official routing")
-	}
-}
-
-func TestOfficialRoutingRejectsUnsupportedModel(t *testing.T) {
-	_, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: glm\n  upstream_id: cline-pass/glm-5.3-flash\n  official_routing: true\n", t.TempDir()))
-	if err == nil {
-		t.Fatal("accepted unsupported official routing model")
-	}
-}
-
 func TestOfficialRoutingReachesStreamAndManagementTest(t *testing.T) {
 	for _, method := range []string{"executor.execute_stream", "management.handle"} {
 		t.Run(method, func(t *testing.T) {
-			s, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n  official_routing: true\n", t.TempDir()))
+			s, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
 			if err != nil {
 				t.Fatal(err)
 			}
