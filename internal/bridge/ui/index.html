@@ -167,7 +167,7 @@
     .row-main { display: grid; grid-template-columns: var(--log-columns); gap: 6px; min-height: 78px; padding: 12px; align-items: center; font-size: 12px; line-height: 1.4; }
     .log-model .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row-main .subtext { font-size: 11px; margin-top: 4px; }
-    .log-model .log-served-model { width: fit-content; max-width: 100%; margin-top: 5px; padding: 3px 6px; border-radius: 4px; background: color-mix(in srgb, #facc15 20%, var(--surface)); color: var(--ink); font-size: 12px; font-weight: 600; }
+    .log-model .log-served-model { margin-top: 1px; color: #CF9546; font-weight: 400; }
     .log-latency { display: grid; gap: 4px; width: 118px; max-width: 100%; }
     .latency-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; border-left: 3px solid var(--metric-color, var(--line)); border-radius: 3px; padding: 2px 5px; background: color-mix(in srgb, var(--metric-color, var(--line)) 7%, var(--surface)); font-size: 11px; font-variant-numeric: tabular-nums; }
     .latency-line strong { color: var(--metric-color, var(--ink)); white-space: nowrap; }
@@ -1412,7 +1412,7 @@
       }).join('') : `<div class="subtext">${local ? '本地退避拦截，未发起上游请求' : '无尝试明细'}</div>`;
       return `<details class="log-entry" data-id="${esc(log.id)}"><summary class="row-main">
         <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${local ? '首 ' : ''}${formatTime(log.time)}</div>${local ? `<div class="subtext mono">末 ${formatTime(lastTime)}</div>` : ''}</div>
-        <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div><div class="subtext mono log-served-model" title="${esc(`真实响应模型：${responseModel || '未报告'}`)}">响应：${shown(responseModel, '未报告')}</div></div>
+        <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div><div class="subtext mono log-served-model" title="${esc(`真实响应模型：${responseModel || '未报告'}`)}">↳ ${shown(responseModel, '未报告')}</div></div>
         <div class="cell"><span class="cell-label">思考强度</span><span class="badge reasoning-badge" title="${log.reasoning_mapping ? (local ? '映射已计算；本次被本地退避拦截，未发往上游' : '插件收到的强度 → 发往上游的强度') : '未应用插件映射；— 表示未识别到显式强度'}">${esc(reasoningText(log))}</span></div>
         <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : incomplete ? '响应截断' : idleCutoff ? '卡住截流' : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div>${networkLogBadge(log)}</div>
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
