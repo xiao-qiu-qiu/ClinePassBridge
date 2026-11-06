@@ -139,6 +139,11 @@
        banner balanced instead of hanging the text off the top edge. */
     .notice.with-action { display: flex; gap: 12px; align-items: center; }
     .notice.with-action > span { flex: 1; }
+    .credential-estimate-notice { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; font-size: 13px; line-height: 1.7; }
+    .credential-estimate-notice > svg { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--warn); }
+    .credential-estimate-notice p + p { margin-top: 4px; }
+    .credential-estimate-notice strong, .credential-estimate-notice a { color: var(--warn); }
+    .credential-estimate-notice a { text-underline-offset: 3px; }
     dialog.dialog-wide { max-width: min(680px, calc(100vw - 32px)); }
     dialog.dialog-wide h3 { margin: 18px 0 6px; font-size: 13px; }
     dialog.dialog-wide ol, dialog.dialog-wide ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 12px; line-height: 1.65; }
@@ -664,6 +669,13 @@
     </section>
 
     <section id="credentialsPanel" role="tabpanel" aria-labelledby="credentialsTab" hidden>
+      <aside class="notice credential-estimate-notice" role="note" aria-label="额度估算提醒">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><circle cx="12" cy="17" r=".8" fill="currentColor" stroke="none"/></svg>
+        <div>
+          <p><strong>额度估算提醒：</strong>Cline 官方定价说明较模糊，未明确峰谷价的适用时段；目前参考其引用的 DeepSeek 官方网页中的峰谷时间估算额度。</p>
+          <p>此外，Cline 疑似削减了额度，当前估算准确性存疑，尚未针对这一疑似变化进一步核验并调整估算。如有相关线索，欢迎<a href="https://github.com/xiao-qiu-qiu/ClinePassBridge/issues" target="_blank" rel="noopener noreferrer">前往 GitHub 提交 Issue ↗</a>。</p>
+        </div>
+      </aside>
       <div class="panel credentials-panel">
         <div class="panel-head"><div><h2 title="正常凭据按优先级从高到低排序；额度耗尽自动暂停的凭据置后，按预计恢复时间从早到晚排序。额度复查确认恢复后重新调度，人工停用独立保留。">凭据管理</h2><p class="panel-hint">Cline 账号整体已用比例 · 同一账号的多个 Key 共享套餐</p></div><div class="row-actions"><button class="button compact" id="openErrorRules" type="button" data-icon="gear">错误规则</button><button class="button compact primary" id="openCredential" type="button" data-icon="plus">添加凭据</button></div></div>
         <div class="toolbar credential-tools">
