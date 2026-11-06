@@ -150,7 +150,7 @@ func TestDeepSeek1017HasClientEmptyOverridesDefaults(t *testing.T) {
 		for _, raw := range []string{"[]", "null"} {
 			t.Run(policy+"/"+raw, func(t *testing.T) {
 				config := strings.ReplaceAll(modelConfig(t, "provider_policy: "+policy+"\n"), "cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017")
-				s, err := registerService(t, config)
+				s, err := registerMigratedService(t, config)
 				if err != nil {
 					t.Fatal(err)
 				}

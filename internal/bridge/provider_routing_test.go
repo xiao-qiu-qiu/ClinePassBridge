@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // capturingHost records the outgoing request bodies so tests can assert on the
@@ -59,6 +62,30 @@ func registerService(t *testing.T, configYAML string) (*Service, error) {
 	s := NewService()
 	_, err := s.Handle("plugin.register", jsonBytes(map[string]any{"config_yaml": []byte(configYAML)}))
 	return s, err
+}
+
+// registerMigratedService opts a fixture into an already migrated settings
+// directory. Tests must still select config/client explicitly in their YAML.
+// Plain registerService keeps exercising fresh-install migration and defaults.
+func registerMigratedService(t *testing.T, configYAML string) (*Service, error) {
+	t.Helper()
+	var config struct {
+		DataDir string `yaml:"data_dir"`
+	}
+	if err := yaml.Unmarshal([]byte(configYAML), &config); err != nil {
+		t.Fatalf("decode migrated fixture: %v", err)
+	}
+	if config.DataDir == "" {
+		t.Fatal("migrated fixture requires an explicit data_dir")
+	}
+	path := filepath.Join(config.DataDir, "settings.json")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("migrated fixture requires a fresh settings file: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{"provider_policy_revision":1}`), 0600); err != nil {
+		t.Fatalf("write migrated fixture: %v", err)
+	}
+	return registerService(t, configYAML)
 }
 
 func modelConfig(t *testing.T, extra string) string {
@@ -124,7 +151,7 @@ func slugs(v any) []string {
 }
 
 func TestProviderAllowListIsInjectedAsOnlyAndOrder(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers:\n      - deepseek\n      - wafer\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers:\n      - deepseek\n      - wafer\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -140,8 +167,8 @@ func TestProviderAllowListIsInjectedAsOnlyAndOrder(t *testing.T) {
 func TestModelWithClearedProvidersKeepsAutomaticRouting(t *testing.T) {
 	for _, upstream := range []string{"cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017"} {
 		t.Run(upstream, func(t *testing.T) {
-			config := strings.ReplaceAll(modelConfig(t, "    providers: []\n"), "cline-pass/deepseek-v4.1-flash", upstream)
-			s, err := registerService(t, config)
+			config := strings.ReplaceAll(modelConfig(t, "    providers: []\nprovider_policy: config\n"), "cline-pass/deepseek-v4.1-flash", upstream)
+			s, err := registerMigratedService(t, config)
 			if err != nil {
 				t.Fatalf("register: %v", err)
 			}
@@ -165,7 +192,7 @@ func TestModelWithClearedProvidersKeepsAutomaticRouting(t *testing.T) {
 func TestClientProviderOverridesConfiguredSetKeyByKey(t *testing.T) {
 	// Under client policy the caller wins for the keys it sets, and the
 	// configured set fills what it left out.
-	s, err := registerService(t, modelConfig(t, "    providers:\n      - deepseek\n      - wafer\nprovider_policy: client\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers:\n      - deepseek\n      - wafer\nprovider_policy: client\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -179,7 +206,7 @@ func TestClientProviderOverridesConfiguredSetKeyByKey(t *testing.T) {
 }
 
 func TestTopLevelProviderShorthandIsMirroredIntoGateway(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers: []\nprovider_policy: client\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers: []\nprovider_policy: client\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -196,7 +223,7 @@ func TestTopLevelProviderShorthandIsMirroredIntoGateway(t *testing.T) {
 }
 
 func TestClientProviderRoutingMergesGatewayAndTopLevelFields(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers: [deepseek, wafer]\nprovider_policy: client\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers: [deepseek, wafer]\nprovider_policy: client\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -213,7 +240,7 @@ func TestClientProviderRoutingMergesGatewayAndTopLevelFields(t *testing.T) {
 }
 
 func TestClientProviderRoutingPreservesExplicitEmptyFields(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers: [deepseek, wafer]\nprovider_policy: client\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers: [deepseek, wafer]\nprovider_policy: client\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -225,7 +252,7 @@ func TestClientProviderRoutingPreservesExplicitEmptyFields(t *testing.T) {
 
 func TestConfigPolicyIgnoresClientOverride(t *testing.T) {
 	// The configured list decides; a caller's hint is dropped, not an error.
-	s, err := registerService(t, modelConfig(t, "    providers:\n      - deepseek\nprovider_policy: config\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers:\n      - deepseek\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -239,7 +266,7 @@ func TestConfigPolicyIgnoresClientOverride(t *testing.T) {
 }
 
 func TestConfigPolicyDropsHintForClearedModel(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers: []\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers: []\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -257,7 +284,7 @@ func TestConfigPolicyDropsHintForClearedModel(t *testing.T) {
 }
 
 func TestConfigPolicyStillInjectsItsOwnSet(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers:\n      - wafer\nprovider_policy: config\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers:\n      - wafer\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -268,7 +295,7 @@ func TestConfigPolicyStillInjectsItsOwnSet(t *testing.T) {
 }
 
 func TestProvidersAreNormalisedOnSave(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    providers:\n      - \" DeepSeek \"\n      - WAFER\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    providers:\n      - \" DeepSeek \"\n      - WAFER\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -303,18 +330,18 @@ func TestProviderConfigValidation(t *testing.T) {
 	}
 }
 
-func TestDeepSeekModelIsPinnedByDefault(t *testing.T) {
+func TestDeepSeekModelIsPinnedUnderConfigPolicy(t *testing.T) {
 	for _, upstream := range []string{"cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017"} {
 		t.Run(upstream, func(t *testing.T) {
-			config := strings.ReplaceAll(modelConfig(t, ""), "cline-pass/deepseek-v4.1-flash", upstream)
-			s, err := registerService(t, config)
+			config := strings.ReplaceAll(modelConfig(t, "provider_policy: config\n"), "cline-pass/deepseek-v4.1-flash", upstream)
+			s, err := registerMigratedService(t, config)
 			if err != nil {
 				t.Fatalf("register: %v", err)
 			}
 			gateway := gatewayOf(t, s, `{"messages":[{"role":"user","content":"hello"}]}`)
 			for _, key := range []string{"only", "order"} {
 				if got := strings.Join(slugs(gateway[key]), ","); got != "deepseek" {
-					t.Errorf("a fresh DeepSeek mapping should default %s to deepseek, got %q", key, got)
+					t.Errorf("config policy should use the seeded DeepSeek mapping for %s, got %q", key, got)
 				}
 			}
 		})
@@ -427,13 +454,13 @@ func TestRoutingCandidatesExtraction(t *testing.T) {
 	}
 }
 
-func TestMissingProviderPolicyDefaultsToConfig(t *testing.T) {
+func TestMissingProviderPolicyDefaultsToNone(t *testing.T) {
 	s, err := registerService(t, modelConfig(t, ""))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	if got := s.config().ProviderPolicy; got != ProviderPolicyConfig {
-		t.Errorf("provider_policy = %q, want %q", got, ProviderPolicyConfig)
+	if got := s.config().ProviderPolicy; got != ProviderPolicyNone {
+		t.Errorf("provider_policy = %q, want %q", got, ProviderPolicyNone)
 	}
 }
 

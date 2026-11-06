@@ -55,6 +55,7 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 
 	cfg := s.config()
 	start := time.Now()
+	attemptStart := start
 	req := ExecutorRequest{
 		AuthID: credential.ID, Model: in.Model, HostCallbackID: r.HostCallbackID,
 		Metadata: map[string]any{"egress_management": true},
@@ -77,8 +78,10 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 	}
 	if err == nil {
 		var stream upstreamStream
-		*entry.UpstreamAttempts++
-		stream, err = s.request(req, credential, j, true, diagnostics)
+		stream, err = s.request(req, credential, j, true, &entry, &attempt, diagnostics)
+		if !stream.attemptStart.IsZero() {
+			attemptStart = stream.attemptStart
+		}
 		if err == nil {
 			_, err = s.consumeSSE(stream, in.Model, &entry, &attempt, start, nil)
 		}
@@ -87,9 +90,10 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 	_ = s.observeQuotaError(credential, err)
 	finishRequestRateLease(lease, err)
 	s.logErrorDetails(&entry, &attempt, err)
-	attempt.Status, attempt.DurationMS = statusOf(err), duration
-	entry.Status, entry.DurationMS = attempt.Status, duration
-	entry.Attempts = []Attempt{attempt}
+	attempt.Status, attempt.DurationMS = statusOf(err), time.Since(attemptStart).Milliseconds()
+	attempt.Error = redactModelTest(safeError(err), credential)
+	entry.Status, entry.DurationMS, entry.Error = attempt.Status, duration, attempt.Error
+	entry.Attempts = append(entry.Attempts, attempt)
 	s.appendLog(entry)
 
 	// A refusal is as informative as a success here: the routing block is
@@ -116,10 +120,18 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 		"model": in.Model, "upstream_id": upstream, "duration_ms": duration,
 		"credential_id": credential.ID, "credential_label": credential.Label,
 		"providers": candidates, "served_by": served, "note": note,
-		"probed_at": time.Now().UTC(),
+		"probed_at":        time.Now().UTC(),
+		"routing_fallback": entry.RoutingFallback,
+		"has_applied":      !entry.RoutingFallback && cfg.ProviderPolicy != ProviderPolicyNone,
 	}
-	if hasPresent {
+	if hasPresent && !entry.RoutingFallback {
 		response["has"] = has
+	} else if hasPresent {
+		response["requested_has"] = has
+		response["note"] = "上游拒绝路由参数，能力过滤已失效；以下仅为自动选路信息"
+	}
+	if cfg.ProviderPolicy == ProviderPolicyNone {
+		response["note"] = "当前未发送路由参数；以下仅为自动选路信息"
 	}
 	return managementJSON(200, response)
 }

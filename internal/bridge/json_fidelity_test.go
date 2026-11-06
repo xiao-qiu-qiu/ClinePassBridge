@@ -9,7 +9,8 @@ import (
 func TestExecutorPreservesRequestNumbers(t *testing.T) {
 	for _, method := range []string{"executor.execute", "executor.execute_stream"} {
 		t.Run(method, func(t *testing.T) {
-			s := registeredService(t, "stream-aggregate")
+			// Preserve the custom provider namespace while checking numeric fidelity.
+			s := registeredService(t, "stream-aggregate", ProviderPolicyClient)
 			h := newFakeHost(ssePlan(simpleSSE()))
 			bodies := make(chan []byte, 1)
 			s.SetHost(func(method string, payload, out any) error {

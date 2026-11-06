@@ -85,6 +85,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 
 	cfg := s.config()
 	start := time.Now()
+	attemptStart := start
 	body := map[string]any{
 		"messages":   []any{map[string]any{"role": "user", "content": "Reply with OK only."}},
 		"max_tokens": 64,
@@ -112,8 +113,10 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 	}
 	if err == nil {
 		var stream upstreamStream
-		*entry.UpstreamAttempts++
-		stream, err = s.request(req, credential, j, true, diagnostics)
+		stream, err = s.request(req, credential, j, true, &entry, &attempt, diagnostics)
+		if !stream.attemptStart.IsZero() {
+			attemptStart = stream.attemptStart
+		}
 		if err == nil {
 			var completion *completion
 			completion, err = s.consumeSSE(stream, in.Model, &entry, &attempt, start, nil)
@@ -140,12 +143,12 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		}
 		detail = redactModelTest(detail, credential)
 	}
-	attempt.Status, attempt.DurationMS = statusOf(err), duration
+	attempt.Status, attempt.DurationMS = statusOf(err), time.Since(attemptStart).Milliseconds()
 	if err != nil {
 		attempt.Error = safeError(fmt.Errorf("%s", redactModelTest(err.Error(), credential)))
 	}
 	entry.Status, entry.DurationMS, entry.Error = attempt.Status, duration, redactModelTest(attempt.Error, credential)
-	entry.Attempts = []Attempt{attempt}
+	entry.Attempts = append(entry.Attempts, attempt)
 	s.appendLog(entry)
 	// Upstream 401/403 are test results, not failures of CPA management authentication.
 	return managementJSON(200, map[string]any{
@@ -154,6 +157,7 @@ func (s *Service) testModel(r ManagementRequest) (any, error) {
 		"credential_id": credential.ID, "credential_label": credential.Label,
 		"reasoning_effort":  entry.ReasoningEffort,
 		"reasoning_mapping": entry.ReasoningMapping,
+		"routing_fallback":  entry.RoutingFallback,
 		"provider":          entry.Provider, "upstream_skipped": entry.UpstreamSkipped, "tested_at": time.Now().UTC(),
 	})
 }

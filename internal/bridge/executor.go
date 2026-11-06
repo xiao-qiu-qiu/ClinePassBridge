@@ -10,6 +10,8 @@ import (
 )
 
 type upstreamStream struct {
+	rejectedBody *bytes.Buffer
+	attemptStart time.Time
 	local        *egressLocalStream
 	output       *outputStreamLifecycle
 	deadline     time.Time
@@ -59,6 +61,11 @@ func (s *Service) prepareWithCredential(r ExecutorRequest, c Credential) (map[st
 // upstream request paths read provider, while others read providerOptions.gateway.
 func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 	cfg := s.config()
+	if cfg.ProviderPolicy == ProviderPolicyNone {
+		delete(j, "providerOptions")
+		delete(j, "provider")
+		return
+	}
 	for _, model := range cfg.Models {
 		if model.ID == alias && model.RoutingMode == RoutingModeCustom {
 			applyCustomProviderRouting(j, model.ProviderOptions, cfg.ProviderPolicy)
@@ -135,7 +142,7 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 func headers(c Credential) http.Header {
 	return http.Header{"Authorization": []string{"Bearer " + c.APIKey}, "Content-Type": []string{"application/json"}, "User-Agent": []string{"ClinePassBridge/" + Version}}
 }
-func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
+func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool, entry *LogEntry, attempt *Attempt, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
 	j["stream"] = stream
 	if stream {
 		opts := object(j["stream_options"])
@@ -147,9 +154,7 @@ func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, str
 	} else {
 		delete(j, "stream_options")
 	}
-	payload := map[string]any{"host_callback_id": r.HostCallbackID, "method": "POST", "url": s.config().BaseURL + "/chat/completions", "headers": headers(c), "body": jsonBytes(j)}
-	management, _ := r.Metadata["egress_management"].(bool)
-	return s.openUpstream(s.egressCredentialPayload(payload, c, management), r.deadline, diagnostics...)
+	return s.requestWithRoutingFallback(r, c, j, entry, attempt, diagnostics...)
 }
 
 func (s *Service) openUpstream(payload any, deadline time.Time, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
@@ -168,6 +173,9 @@ func (s *Service) openUpstream(payload any, deadline time.Time, diagnostics ...*
 	}
 	if up, handled, err := s.openEgress(payload, deadline, diagnostics...); handled {
 		return up, err
+	}
+	if values, ok := payload.(map[string]any); ok {
+		delete(values, routingContextKey)
 	}
 	type result struct {
 		up  upstreamStream
@@ -306,7 +314,12 @@ func (s *Service) readJSON(up upstreamStream) ([]byte, error) {
 
 func (s *Service) readJSONObserved(up upstreamStream, observe func(map[string]any)) ([]byte, error) {
 	var b bytes.Buffer
-	e := s.read(up, func(v []byte) error { b.Write(v); return nil })
+	var e error
+	if up.rejectedBody != nil {
+		b = *up.rejectedBody
+	} else {
+		e = s.read(up, func(v []byte) error { b.Write(v); return nil })
+	}
 	var j map[string]any
 	if observe != nil || up.StatusCode < 200 || up.StatusCode >= 300 {
 		j, _ = decodeObject(b.Bytes())
@@ -364,9 +377,11 @@ func (s *Service) execute(r ExecutorRequest) (any, error) {
 		}
 		t := time.Now()
 		var us upstreamStream
-		*entry.UpstreamAttempts++
 		recordServerTools(j, &entry, &attempt)
-		us, e = s.request(r, c, j, wantStream)
+		us, e = s.request(r, c, j, wantStream, &entry, &attempt)
+		if !us.attemptStart.IsZero() {
+			t = us.attemptStart
+		}
 		if e == nil {
 			if wantStream {
 				var cp *completion
@@ -537,6 +552,7 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 	entry := s.newLog(r, c, up)
 	s.applyReasoningMapping(j, &entry)
 	start := time.Now()
+	attemptStart := start
 	var lease *rateLease
 	upstreamOpened := false
 	attempt := Attempt{Mode: "stream", Provider: "unknown"}
@@ -549,7 +565,7 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 		entry.DurationMS = time.Since(start).Milliseconds()
 		attempt.Status = entry.Status
 		attempt.Error = entry.Error
-		attempt.DurationMS = entry.DurationMS
+		attempt.DurationMS = time.Since(attemptStart).Milliseconds()
 		s.logErrorDetails(&entry, &attempt, err)
 		entry.Attempts = append(entry.Attempts, attempt)
 		if upstreamOpened {
@@ -568,9 +584,11 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 	if e != nil {
 		return failEarly(e)
 	}
-	*entry.UpstreamAttempts++
 	recordServerTools(j, &entry, &attempt)
-	us, e := s.request(r, c, j, true)
+	us, e := s.request(r, c, j, true, &entry, &attempt)
+	if !us.attemptStart.IsZero() {
+		attemptStart = us.attemptStart
+	}
 	upstreamOpened = us.StreamID != ""
 	if e != nil {
 		return failEarly(e)
@@ -617,11 +635,11 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 			attempt.Status = statusOf(err)
 			attempt.Error = safeError(err)
 			s.logErrorDetails(&entry, &attempt, err)
-			attempt.DurationMS = time.Since(start).Milliseconds()
+			attempt.DurationMS = time.Since(attemptStart).Milliseconds()
 			entry.Attempts = append(entry.Attempts, attempt)
 			entry.Status = attempt.Status
 			entry.Error = attempt.Error
-			entry.DurationMS = attempt.DurationMS
+			entry.DurationMS = time.Since(start).Milliseconds()
 			finishRequestRateLease(lease, err)
 			recordOutputStreamClose(&entry, err, output.supported, s.hostFaultPolicy(err))
 			s.appendLog(entry)

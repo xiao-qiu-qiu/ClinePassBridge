@@ -27,7 +27,7 @@ func TestCustomRoutingLegacyFieldsStayOptional(t *testing.T) {
 func customRoutingService(t *testing.T, policy, options string) *Service {
 	t.Helper()
 	config := strings.ReplaceAll(modelConfig(t, "provider_policy: "+policy+"\n"), "cline-pass/deepseek-v4.1-flash", customRoutingUpstream)
-	s, err := registerService(t, config)
+	s, err := registerMigratedService(t, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestCustomRoutingEmptyObjectAndMissingObject(t *testing.T) {
 		}
 	}
 	// Missing preset fields must also remain unseeded in custom mode.
-	s, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: %s\n  routing_mode: custom\n", filepath.ToSlash(t.TempDir()), customRoutingUpstream))
+	s, err := registerMigratedService(t, fmt.Sprintf("data_dir: %q\nprovider_policy: config\nmodels:\n- id: deepseek-flash\n  upstream_id: %s\n  routing_mode: custom\n", filepath.ToSlash(t.TempDir()), customRoutingUpstream))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestCustomRoutingYAMLAndLegacyMode(t *testing.T) {
 	for _, mode := range []string{"", RoutingModePreset, RoutingModeCustom} {
 		t.Run(mode, func(t *testing.T) {
 			config := fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: %s\n  routing_mode: %q\n  provider_options:\n    gateway:\n      only: [custom]\n    experimental:\n      enabled: false\n      values: [null, 7, true]\n", filepath.ToSlash(t.TempDir()), customRoutingUpstream, mode)
-			s, err := registerService(t, config)
+			s, err := registerMigratedService(t, config+"provider_policy: config\n")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -316,7 +316,8 @@ func TestReasoningMappingExecutorOutbound(t *testing.T) {
 			{name: "unset-deletion", effort: "low", enabled: true, rules: map[string]string{"low": "unset"}, mapping: &ReasoningMappingLog{"low", "unset"}},
 		} {
 			t.Run(transport.name+"/"+tc.name, func(t *testing.T) {
-				s := registeredService(t, transport.mode)
+				// The mapping must leave nested provider options intact under client policy.
+				s := registeredService(t, transport.mode, ProviderPolicyClient)
 				s.cfg.Models[0].ReasoningMapping.Enabled = tc.enabled
 				for from, to := range tc.rules {
 					s.cfg.Models[0].ReasoningMapping.Rules[from] = to

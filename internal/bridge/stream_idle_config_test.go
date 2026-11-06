@@ -45,13 +45,18 @@ func TestStreamIdleConfigExplicitValuesPersistAndReload(t *testing.T) {
 	for _, source := range []string{"yaml", "management-json"} {
 		for _, seconds := range []int{1, 10, 37, 200, 1800} {
 			t.Run(fmt.Sprintf("%s-%d", source, seconds), func(t *testing.T) {
-				s := observabilityService(t, "")
+				var s *Service
 				if source == "yaml" {
-					configYAML := fmt.Sprintf("data_dir: %q\nstream_idle_cutoff_enabled: false\nstream_idle_timeout_seconds: %d\n", filepath.ToSlash(s.config().DataDir), seconds)
-					if err := s.configure(jsonBytes(map[string]any{"config_yaml": []byte(configYAML)})); err != nil {
+					// Supply YAML before initial migration persists the installation settings.
+					configYAML := fmt.Sprintf("data_dir: %q\nstream_idle_cutoff_enabled: false\nstream_idle_timeout_seconds: %d\n", filepath.ToSlash(t.TempDir()), seconds)
+					var err error
+					s, err = registerService(t, configYAML)
+					if err != nil {
 						t.Fatal(err)
 					}
+					t.Cleanup(func() { observabilityShutdown(t, s) })
 				} else {
+					s = observabilityService(t, "")
 					observabilityManagement(t, s, "PUT", "/config", nil, jsonBytes(map[string]any{
 						"stream_idle_cutoff_enabled": false, "stream_idle_timeout_seconds": seconds,
 					}), 200)

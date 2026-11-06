@@ -216,11 +216,18 @@ func (s *Service) saveConfig(cfg Config) error {
 	if e := cfg.validate(); e != nil {
 		return e
 	}
-	if e := atomicJSON(filepath.Join(cfg.DataDir, "settings.json"), cfg); e != nil {
+	s.mu.RLock()
+	revision := s.providerPolicyRevision
+	s.mu.RUnlock()
+	if revision < providerPolicyMigrationRevision {
+		revision = providerPolicyMigrationRevision
+	}
+	if e := saveProviderPolicySettings(cfg, revision); e != nil {
 		return e
 	}
 	s.mu.Lock()
 	s.cfg = cfg
+	s.providerPolicyRevision = revision
 	s.mu.Unlock()
 	return errors.Join(s.refreshRegistrations(), s.reconcileQuotaScheduling())
 }

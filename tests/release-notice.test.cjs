@@ -110,6 +110,20 @@ test('first visit presents once; dismissal persists across refresh and plugin up
   assert.equal(otherService.dialog.open, true);
 });
 
+test('已读旧公告的用户收到本次不钉公告，确认后刷新不再弹出', () => {
+  const old = page({ noticeRevision: '1' });
+  old.update('0.4.6');
+  old.click('releaseNoticeDismiss');
+  const upgraded = page({ store: old.store });
+  upgraded.update('0.4.7');
+  assert.equal(upgraded.dialog.open, true);
+  upgraded.click('releaseNoticeSettings');
+  assert.deepEqual(upgraded.tabs, ['pin']);
+  const refreshed = page({ store: old.store });
+  refreshed.update('0.4.7');
+  assert.equal(refreshed.dialog.open, false);
+});
+
 test('only an explicitly published new notice revision prompts existing readers again', () => {
   const first = page({ noticeRevision: '1' });
   first.update('1.0');
@@ -159,7 +173,7 @@ test('manual bell reopens read notices; settings navigates and acknowledges; Esc
   view.click('releaseNoticeButton');
   assert.equal(view.dialog.open, true);
   view.click('releaseNoticeSettings');
-  assert.deepEqual(view.tabs, ['config']);
+  assert.deepEqual(view.tabs, ['pin']);
   assert.equal(view.dialog.open, false);
   const refreshed = page({ store: view.store });
   refreshed.update('1.0');

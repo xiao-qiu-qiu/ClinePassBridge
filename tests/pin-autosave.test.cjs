@@ -287,3 +287,16 @@ test('快速切换策略串行保存，旧响应保留当前选择且最终值�
   assert.equal(view.state.config.log_retention, 731);
   assert.equal(view.nodes.get('providerPolicyState').dataset.phase, 'saved');
 });
+
+test('不钉策略保存后保留模型参数，手动切回配置优先仍可保存', async () => {
+  const view = page();
+  const models = clone(view.state.models);
+  await view.choosePolicy('none');
+  assert.equal(await view.flushPolicy(), true);
+  assert.equal(view.server.provider_policy, 'none');
+  assert.deepEqual(view.server.models, models);
+  await view.choosePolicy('config');
+  assert.equal(await view.flushPolicy(), true);
+  assert.equal(view.server.provider_policy, 'config');
+  assert.deepEqual(view.server.models, models);
+});

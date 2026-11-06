@@ -10,7 +10,7 @@ import (
 // neither field is silently dropped.
 
 func TestConfiguredHasIsInjected(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    has:\n      - vision\n      - implicit-caching\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    has:\n      - vision\n      - implicit-caching\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -19,14 +19,14 @@ func TestConfiguredHasIsInjected(t *testing.T) {
 		t.Errorf("has = %q, want vision,implicit-caching", got)
 	}
 	if got := strings.Join(slugs(gateway["only"]), ","); got != "deepseek" {
-		t.Errorf("only = %q, want the seeded fresh-install default deepseek", got)
+		t.Errorf("only = %q, want the seeded provider under config policy", got)
 	}
 }
 
 func TestClientHasWinsUnderClientPolicy(t *testing.T) {
 	// The caller that knows what it needs keeps control; the configured filter
 	// must not overwrite a caller-supplied one.
-	s, err := registerService(t, modelConfig(t, "    has:\n      - vision\nprovider_policy: client\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    has:\n      - vision\nprovider_policy: client\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestClientHasIsDroppedUnderConfigPolicy(t *testing.T) {
 	// Config policy owns the routing fields, so a caller hint is discarded —
 	// this is exactly why a server-side filter has to be configured before
 	// switching the policy, or the request falls back to the private relay.
-	s, err := registerService(t, modelConfig(t, "    has:\n      - vision\nprovider_policy: config\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    has:\n      - vision\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -52,8 +52,8 @@ func TestClientHasIsDroppedUnderConfigPolicy(t *testing.T) {
 
 func TestClearedHasLeavesNoProviderOptions(t *testing.T) {
 	// An explicit empty list overrides even the 1017 model's capability defaults.
-	config := strings.ReplaceAll(modelConfig(t, "    has: []\n"), "cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017")
-	s, err := registerService(t, config)
+	config := strings.ReplaceAll(modelConfig(t, "    has: []\nprovider_policy: config\n"), "cline-pass/deepseek-v4.1-flash", "cline-pass/deepseek-v4.1-flash-1017")
+	s, err := registerMigratedService(t, config)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestClearedHasLeavesNoProviderOptions(t *testing.T) {
 }
 
 func TestHasIsNormalisedToLowercaseSlugs(t *testing.T) {
-	s, err := registerService(t, modelConfig(t, "    has:\n      -  Vision\n      - \" implicit-caching \"\n"))
+	s, err := registerMigratedService(t, modelConfig(t, "    has:\n      -  Vision\n      - \" implicit-caching \"\nprovider_policy: config\n"))
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}

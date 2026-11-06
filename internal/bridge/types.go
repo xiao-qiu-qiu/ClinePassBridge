@@ -11,16 +11,18 @@ import (
 	"time"
 )
 
-const Version = "0.4.6"
+const Version = "0.4.7"
 const Provider = "cline-pass"
 const PluginID = "clinepassbridge"
 
 // How a client-supplied provider preference interacts with the per-model one.
 const (
+	// ProviderPolicyNone removes routing hints so the upstream gateway chooses.
+	ProviderPolicyNone = "none"
 	// ProviderPolicyClient lets the caller's own gateway options win.
 	ProviderPolicyClient = "client"
 	// ProviderPolicyConfig uses configured providers and capability filters,
-	// ignoring caller overrides. This is the default policy.
+	// ignoring caller overrides.
 	ProviderPolicyConfig = "config"
 )
 
@@ -158,7 +160,7 @@ type Config struct {
 }
 
 func defaultConfig() Config {
-	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{{ID: "deepseek-v4.1-flash-1017", UpstreamID: "cline-pass/deepseek-v4.1-flash-1017", Providers: []string{"deepseek"}, Has: defaultHasFor("cline-pass/deepseek-v4.1-flash-1017")}}, NonstreamMode: "stream-aggregate", ClientRetryCompatibility: true, StreamIdleCutoffEnabled: false, StreamIdleTimeoutSeconds: 20, ProviderPolicy: ProviderPolicyConfig, TimeoutSeconds: 600, LogRetention: 1000, MaxResponseBytes: 64 << 20}
+	return Config{DataDir: "plugins/clinepassbridge-data", BaseURL: "https://api.cline.bot/api/v1", Models: []Model{{ID: "deepseek-v4.1-flash-1017", UpstreamID: "cline-pass/deepseek-v4.1-flash-1017", Providers: []string{"deepseek"}, Has: defaultHasFor("cline-pass/deepseek-v4.1-flash-1017")}}, NonstreamMode: "stream-aggregate", ClientRetryCompatibility: true, StreamIdleCutoffEnabled: false, StreamIdleTimeoutSeconds: 20, ProviderPolicy: ProviderPolicyNone, TimeoutSeconds: 600, LogRetention: 1000, MaxResponseBytes: 64 << 20}
 }
 
 // Scalar settings support partial updates, but supplied collections replace the
@@ -214,14 +216,12 @@ func (c *Config) validate() error {
 	if c.NonstreamMode != "native" && c.NonstreamMode != "native-fallback" && c.NonstreamMode != "stream-aggregate" {
 		return fail(400, "invalid nonstream_mode")
 	}
-	// Settings written before this field existed carry no value. Default to the
-	// configured list deciding, so an unconfigured install cannot have its
-	// routing changed by whatever a caller happens to send.
+	// An absent policy keeps plugin routing disabled without clearing saved drafts.
 	if c.ProviderPolicy == "" {
-		c.ProviderPolicy = ProviderPolicyConfig
+		c.ProviderPolicy = ProviderPolicyNone
 	}
-	if c.ProviderPolicy != ProviderPolicyClient && c.ProviderPolicy != ProviderPolicyConfig {
-		return fail(400, "provider_policy must be client or config")
+	if c.ProviderPolicy != ProviderPolicyNone && c.ProviderPolicy != ProviderPolicyClient && c.ProviderPolicy != ProviderPolicyConfig {
+		return fail(400, "provider_policy must be none, client or config")
 	}
 	seen := map[string]bool{}
 	for i := range c.Models {
@@ -349,6 +349,7 @@ type Attempt struct {
 	Mode                    string           `json:"mode"`
 	Provider                string           `json:"provider"`
 	ProviderSource          string           `json:"provider_source"`
+	RoutingFallback         bool             `json:"routing_fallback,omitempty"`
 	DurationMS              int64            `json:"duration_ms"`
 	Error                   string           `json:"error,omitempty"`
 	ServedModel             string           `json:"served_model,omitempty"`
@@ -400,6 +401,7 @@ type LogEntry struct {
 	Status                      int       `json:"status"`
 	Provider                    string    `json:"provider"`
 	ProviderSource              string    `json:"provider_source"`
+	RoutingFallback             bool      `json:"routing_fallback,omitempty"`
 	DurationMS                  int64     `json:"duration_ms"`
 	TTFTMS                      int64     `json:"ttft_ms"`
 	PromptTokens                int64     `json:"prompt_tokens"`

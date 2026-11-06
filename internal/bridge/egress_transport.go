@@ -107,7 +107,17 @@ func (s *Service) openEgress(payload any, deadline time.Time, diagnostics ...*mo
 		Headers  http.Header `json:"headers"`
 		Body     []byte      `json:"body"`
 	}
-	encoded, err := json.Marshal(payload)
+	serializable := payload
+	if _, present := values[routingContextKey]; present {
+		copied := make(map[string]any, len(values))
+		for key, value := range values {
+			if key != routingContextKey {
+				copied[key] = value
+			}
+		}
+		serializable = copied
+	}
+	encoded, err := json.Marshal(serializable)
 	if err != nil || json.Unmarshal(encoded, &request) != nil {
 		return upstreamStream{}, true, fail(400, "invalid egress HTTP request")
 	}
@@ -119,7 +129,8 @@ func (s *Service) openEgress(payload any, deadline time.Time, diagnostics ...*mo
 		return upstreamStream{}, true, err
 	}
 	defer s.active.Done()
-	op, err := p.operation(request.Callback, deadline)
+	parent, _ := values[routingContextKey].(context.Context)
+	op, err := p.routingOperation(request.Callback, deadline, parent)
 	if err != nil {
 		return upstreamStream{}, true, err
 	}

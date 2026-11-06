@@ -12,7 +12,7 @@ func TestOfficialRoutingFollowsProviderPolicy(t *testing.T) {
 		want                              bool
 	}{
 		{"default-official", "config", "cline-pass/deepseek-v4.1-flash-1017", "[deepseek]", true},
-		{"default-install", "", "cline-pass/deepseek-v4.1-flash-1017", "null", true},
+		{"default-install", "", "cline-pass/deepseek-v4.1-flash-1017", "null", false},
 		{"client", "client", "cline-pass/deepseek-v4.1-flash-1017", "[deepseek]", false},
 		{"automatic", "config", "cline-pass/deepseek-v4.1-flash-1017", "[]", false},
 		{"other-provider", "config", "cline-pass/deepseek-v4.1-flash-1017", "[alibaba]", false},
@@ -21,11 +21,15 @@ func TestOfficialRoutingFollowsProviderPolicy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := fmt.Sprintf("data_dir: %q\nprovider_policy: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: %s\n  providers: %s\n", t.TempDir(), tc.policy, tc.upstream, tc.providers)
-			s, err := registerService(t, cfg)
+			register := registerService
+			if tc.policy == ProviderPolicyConfig || tc.policy == ProviderPolicyClient {
+				register = registerMigratedService
+			}
+			s, err := register(t, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}],"providerOptions":{"gateway":{"only":["novita"]},"deepseek":{"reasoningEffort":"max"}}}`)
+			body := upstreamBodyOf(t, s, `{"messages":[{"role":"user","content":"hello"}],"reasoning_effort":"max","providerOptions":{"gateway":{"only":["novita"]},"deepseek":{"reasoningEffort":"max"}}}`)
 			gateway := object(object(body["providerOptions"])["gateway"])
 			if (gateway["inferenceRegion"] != nil) != tc.want {
 				t.Fatalf("region mismatch: %s", jsonBytes(gateway))
@@ -47,14 +51,28 @@ func TestOfficialRoutingFollowsProviderPolicy(t *testing.T) {
 			if tc.policy == "client" && string(jsonBytes(gateway["only"])) != `["novita"]` {
 				t.Fatal("client preference lost")
 			}
-			if str(object(object(body["providerOptions"])["deepseek"])["reasoningEffort"]) != "max" {
+			if tc.policy == "" {
+				if s.config().ProviderPolicy != ProviderPolicyNone {
+					t.Fatal("fresh installation did not use none policy")
+				}
+				if _, present := body["provider"]; present {
+					t.Fatal("fresh installation forwarded provider routing")
+				}
+				if _, present := body["providerOptions"]; present {
+					t.Fatal("fresh installation forwarded providerOptions")
+				}
+			}
+			if tc.policy != "" && str(object(object(body["providerOptions"])["deepseek"])["reasoningEffort"]) != "max" {
 				t.Fatal("other namespace lost")
+			}
+			if body["reasoning_effort"] != "max" {
+				t.Fatal("generation parameter lost")
 			}
 		})
 	}
 }
 func TestOfficialRoutingClientRegionPreserved(t *testing.T) {
-	s, err := registerService(t, fmt.Sprintf("data_dir: %q\nprovider_policy: client\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
+	s, err := registerMigratedService(t, fmt.Sprintf("data_dir: %q\nprovider_policy: client\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +85,7 @@ func TestOfficialRoutingClientRegionPreserved(t *testing.T) {
 func TestOfficialRoutingReachesStreamAndManagementTest(t *testing.T) {
 	for _, method := range []string{"executor.execute_stream", "management.handle"} {
 		t.Run(method, func(t *testing.T) {
-			s, err := registerService(t, fmt.Sprintf("data_dir: %q\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
+			s, err := registerMigratedService(t, fmt.Sprintf("data_dir: %q\nprovider_policy: config\nmodels:\n- id: deepseek-flash\n  upstream_id: cline-pass/deepseek-v4.1-flash-1017\n", t.TempDir()))
 			if err != nil {
 				t.Fatal(err)
 			}

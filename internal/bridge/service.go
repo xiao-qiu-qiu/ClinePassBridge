@@ -54,6 +54,8 @@ type Service struct {
 	errorRules           []RequestErrorRule
 	errorRuleSynced      map[string]string
 	errorRuleSyncErrors  map[string]string
+
+	providerPolicyRevision int
 }
 
 func NewService() *Service {
@@ -110,10 +112,10 @@ func atomicJSON(path string, v any) error {
 		return e
 	}
 	tmp := path + ".tmp-" + id()
+	defer os.Remove(tmp)
 	if e = os.WriteFile(tmp, b, 0600); e != nil {
 		return e
 	}
-	defer os.Remove(tmp)
 	return os.Rename(tmp, path)
 }
 func (s *Service) configure(raw json.RawMessage) (err error) {
@@ -132,18 +134,27 @@ func (s *Service) configure(raw json.RawMessage) (err error) {
 		}
 	}
 	// CPA passes plugin-owned config. State holds UI changes and bounded request metadata, never API keys.
-	if b, e := os.ReadFile(filepath.Join(cfg.DataDir, "settings.json")); e == nil {
-		if e = decodeConfigJSON(b, &cfg); e != nil {
-			return e
-		}
+	revision, e := loadProviderPolicySettings(&cfg)
+	if e != nil {
+		return e
 	}
 	if e := cfg.validate(); e != nil {
 		return e
+	}
+	s.mu.RLock()
+	changingDataDir := s.loaded && filepath.Clean(cfg.DataDir) != filepath.Clean(s.cfg.DataDir)
+	s.mu.RUnlock()
+	if changingDataDir {
+		return fail(409, "Changing data_dir requires restarting the plugin with its complete data directory")
 	}
 	if e := os.MkdirAll(cfg.DataDir, 0700); e != nil {
 		return e
 	}
 	rules, err := loadErrorRules(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	revision, err = migrateProviderPolicy(&cfg, revision)
 	if err != nil {
 		return err
 	}
@@ -161,9 +172,6 @@ func (s *Service) configure(raw json.RawMessage) (err error) {
 			err = s.reconcileQuotaScheduling()
 		}
 	}()
-	if s.loaded && filepath.Clean(cfg.DataDir) != filepath.Clean(s.cfg.DataDir) {
-		return fail(409, "Changing data_dir requires restarting the plugin with its complete data directory")
-	}
 	if s.stopped {
 		// The host re-registers a quiesced instance when replacement fails.
 		// Reload persisted counters rather than reviving an obsolete snapshot.
@@ -173,6 +181,7 @@ func (s *Service) configure(raw json.RawMessage) (err error) {
 		s.egress = newEgressManager()
 	}
 	s.cfg = cfg
+	s.providerPolicyRevision = revision
 	s.errorRules = rules
 	if !s.loaded {
 		if err := s.loadEgressLocked(); err != nil {

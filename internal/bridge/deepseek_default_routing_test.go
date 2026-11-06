@@ -14,7 +14,7 @@ func TestDeepSeekDefaultRoutingFreshInstall(t *testing.T) {
 	if len(cfg.Models) != 1 || cfg.Models[0].ID != "deepseek-v4.1-flash-1017" || cfg.Models[0].UpstreamID != "cline-pass/deepseek-v4.1-flash-1017" {
 		t.Fatalf("fresh-install models = %s, want only the 1017 mapping", jsonBytes(cfg.Models))
 	}
-	if cfg.ProviderPolicy != ProviderPolicyConfig || !reflect.DeepEqual(cfg.Models[0].Providers, []string{"deepseek"}) {
+	if cfg.ProviderPolicy != ProviderPolicyNone || !reflect.DeepEqual(cfg.Models[0].Providers, []string{"deepseek"}) {
 		t.Fatalf("fresh-install routing defaults: policy=%q models=%s", cfg.ProviderPolicy, jsonBytes(cfg.Models))
 	}
 	if !reflect.DeepEqual(cfg.Models[0].Has, []string{"vision", "implicit-caching"}) {
@@ -33,28 +33,33 @@ func TestDeepSeekDefaultRoutingFreshInstall(t *testing.T) {
 		t.Fatalf("registration changed fresh-install defaults: %s", jsonBytes(loaded.Models))
 	}
 
-	for _, payload := range []string{
-		`{"messages":[{"role":"user","content":"hello"}]}`,
-		`{"messages":[{"role":"user","content":"hello"}],"provider":{"only":["fireworks"]},"providerOptions":{"gateway":{"only":[],"has":null,"inferenceRegion":{"scope":"zone","geoRegion":"eu"}}}}`,
+	beforeModels := string(jsonBytes(loaded.Models))
+	for _, tc := range []struct {
+		name, payload string
+	}{
+		{"plain", `{"messages":[{"role":"user","content":"hello"}]}`},
+		{"client-routing-and-model-options", `{"messages":[{"role":"user","content":"hello"}],"reasoning_effort":"max","temperature":0.5,"provider":{"only":["fireworks"]},"providerOptions":{"gateway":{"only":[],"has":null,"inferenceRegion":{"scope":"zone","geoRegion":"eu"}},"deepseek":{"reasoningEffort":"max"}}}`},
 	} {
-		body := prepareDeepSeekDefaultRequest(t, s, loaded.Models[0].ID, payload)
-		gateway := object(object(body["providerOptions"])["gateway"])
-		assertDeepSeekDefaultRegion(t, gateway, true)
-		for _, route := range []map[string]any{gateway, object(body["provider"])} {
-			for _, key := range []string{"only", "order"} {
-				if got := string(jsonBytes(route[key])); got != `["deepseek"]` {
-					t.Errorf("prepared %s = %s, want [deepseek]", key, got)
-				}
+		t.Run(tc.name, func(t *testing.T) {
+			body := prepareDeepSeekDefaultRequest(t, s, loaded.Models[0].ID, tc.payload)
+			if _, present := body["provider"]; present {
+				t.Errorf("none policy forwarded provider routing: %s", jsonBytes(body))
 			}
-		}
-		if got := string(jsonBytes(gateway["has"])); got != `["vision","implicit-caching"]` {
-			t.Errorf("prepared has = %s, want the default capabilities", got)
-		}
+			if _, present := body["providerOptions"]; present {
+				t.Errorf("none policy forwarded providerOptions: %s", jsonBytes(body))
+			}
+			if tc.name == "client-routing-and-model-options" && (body["reasoning_effort"] != "max" || string(jsonBytes(body["temperature"])) != "0.5") {
+				t.Errorf("none policy changed generation parameters: %s", jsonBytes(body))
+			}
+			if got := string(jsonBytes(s.config().Models)); got != beforeModels {
+				t.Errorf("none policy changed saved model parameters: %s", got)
+			}
+		})
 	}
 }
 
-// These opt-outs use the existing provider/has/policy fields deliberately;
-// coverage of fresh-install routing must not depend on new custom-mode fields.
+// Explicit config/client policies retain their provider/has behavior after
+// users opt back into routing, independently of the fresh-install none policy.
 func TestDeepSeekDefaultRoutingOverrides(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -79,6 +84,7 @@ func TestDeepSeekDefaultRoutingOverrides(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := defaultConfig()
 			cfg.DataDir = t.TempDir()
+			cfg.ProviderPolicy = ProviderPolicyConfig
 			tc.edit(&cfg)
 			if err := cfg.validate(); err != nil {
 				t.Fatal(err)

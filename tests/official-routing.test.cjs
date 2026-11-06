@@ -6,5 +6,5 @@ const html=fs.readFileSync(require('node:path').join(__dirname,'../internal/brid
 const start=html.indexOf('    function updateProviderPolicyHint(');
 const end=html.indexOf('    async function flushProviderPolicy(',start);
 function hint(policy){const nodes={providerPolicy:{value:policy},providerPolicyHint:{textContent:''}};const context=vm.createContext({$:id=>nodes[id]});vm.runInContext(html.slice(start,end)+';updateProviderPolicyHint();',context);return nodes.providerPolicyHint.textContent;}
-test('default provider policy explains automatic DeepSeek region constraint',()=>{assert.match(hint('config'),/DeepSeek 1017/);assert.match(hint('config'),/deepseek/);assert.match(hint('config'),/区域约束/);});
+test('unpinned policy explains inactive saved routing and explicit policies explain fallback',()=>{assert.match(hint('none'),/不发送/);assert.match(hint('none'),/配置保留/);assert.match(hint('config'),/移除后重试一次/);assert.match(hint('config'),/不能保证固定提供方/);});
 test('client provider policy retains client parameter priority',()=>{assert.match(hint('client'),/优先使用客户端/);assert.match(hint('client'),/未设置/);});

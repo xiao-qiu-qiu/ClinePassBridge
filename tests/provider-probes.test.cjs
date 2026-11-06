@@ -100,6 +100,23 @@ test('候选按能力草稿、凭据和模型映射隔离，恢复原配置时�
   assert.doesNotMatch(view.result(), /data-provider=/);
 });
 
+test('不钉策略隔离候选缓存，丢弃能力条件的探测不会冒充可钉结果', async () => {
+  const view = page(request => request.url === '/models/providers' ? {
+    ok: true, upstream_id: 'cline-pass/deepseek-v4.1-flash-1017', has: [],
+    has_applied: false, routing_fallback: true, providers: ['private'], note: '自动选路',
+  } : undefined);
+  await view.ui.probeModelProviders(view.model());
+  assert.match(view.result(), /已改为自动选路/);
+  assert.match(view.result(), /未应用能力过滤/);
+  assert.doesNotMatch(view.result(), /data-provider=/);
+  view.state.config.provider_policy = 'none';
+  view.ui.syncProviderProbeResults();
+  assert.doesNotMatch(view.result(), /已改为自动选路/);
+  await view.ui.probeModelProviders(view.model());
+  assert.match(view.result(), /private/);
+  assert.doesNotMatch(view.result(), /data-provider=/);
+});
+
 test('旧探测晚到时不会把旧能力、旧凭据或旧映射的候选显示到当前行', async () => {
   for (const change of ['capability', 'credential', 'mapping']) {
     const gate = deferred();

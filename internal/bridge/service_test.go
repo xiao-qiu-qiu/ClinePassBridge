@@ -107,15 +107,22 @@ func (h *fakeHost) call(method string, payload, out any) error {
 	}
 }
 
-func registeredService(t *testing.T, mode string) *Service {
+func registeredService(t *testing.T, mode string, providerPolicy ...string) *Service {
 	t.Helper()
-	s := NewService()
 	configYAML := fmt.Sprintf("data_dir: %q\n", filepath.ToSlash(t.TempDir()))
 	configYAML += "models:\n  - id: deepseek-flash\n    upstream_id: cline-pass/deepseek-v4.1-flash\n"
 	if mode != "" {
 		configYAML += fmt.Sprintf("nonstream_mode: %s\n", mode)
 	}
-	_, err := s.Handle("plugin.register", jsonBytes(map[string]any{"config_yaml": []byte(configYAML)}))
+	register := registerService
+	if len(providerPolicy) > 1 {
+		t.Fatal("registered fixture accepts at most one provider policy")
+	}
+	if len(providerPolicy) == 1 {
+		configYAML += fmt.Sprintf("provider_policy: %s\n", providerPolicy[0])
+		register = registerMigratedService
+	}
+	s, err := register(t, configYAML)
 	if err != nil {
 		t.Fatalf("register plugin: %v", err)
 	}
@@ -732,6 +739,11 @@ func TestCatalogRefreshUsesPassOffersAndPreservesAliases(t *testing.T) {
 		t.Fatalf("parse credential for registry refresh: %v", err)
 	}
 	originalModels := s.config().Models
+	settingsPath := filepath.Join(s.config().DataDir, "settings.json")
+	beforeSettings, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings before catalog refresh: %v", err)
+	}
 	catalog := map[string]any{
 		"clinePass": []any{
 			map[string]any{"id": "cline-pass/deepseek-v4.1-flash"},
@@ -794,8 +806,9 @@ func TestCatalogRefreshUsesPassOffersAndPreservesAliases(t *testing.T) {
 	if len(models) != 2 || !bytes.Equal(jsonBytes(models), jsonBytes(originalModels)) || len(savedAuth) != 0 {
 		t.Fatalf("candidate refresh changed registered models or saved auth: models=%#v saved=%#v", models, savedAuth)
 	}
-	if _, err := os.Stat(filepath.Join(s.config().DataDir, "settings.json")); !os.IsNotExist(err) {
-		t.Fatalf("candidate refresh wrote settings: %v", err)
+	afterSettings, err := os.ReadFile(settingsPath)
+	if err != nil || !bytes.Equal(beforeSettings, afterSettings) {
+		t.Fatalf("candidate refresh changed settings: %v", err)
 	}
 	selected := append(append([]Model(nil), models...), response.Models[1])
 	result, err = s.Handle("management.handle", jsonBytes(ManagementRequest{

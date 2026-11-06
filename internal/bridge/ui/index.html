@@ -640,12 +640,12 @@
     </section>
 
     <section id="pinPanel" role="tabpanel" aria-labelledby="pinTab" hidden>
-      <div class="notice with-action" role="note"><span>插件配置优先时，预设的 DeepSeek 1017 仅允许 deepseek 即自动附加区域约束；自定义模式按填写的 JSON 请求上游。实际提供方见日志。</span><button class="button compact" id="openPinEvidence" type="button" data-icon="book">详细证据</button></div>
+      <div class="notice with-action" role="note"><span>Cline 当前拒绝客户端路由参数，建议使用「不钉」。提供方由 Cline 自动选择，可能落到 private；实际结果见日志。</span><button class="button compact" id="openPinEvidence" type="button" data-icon="book">历史证据</button></div>
       <div class="panel">
-        <div class="panel-head"><div><h2>上游策略</h2><p class="panel-hint">选择插件配置与客户端参数的优先级。</p></div><div class="pin-save-feedback"><span class="pin-save-status" id="providerPolicyState" role="status" aria-live="polite">自动保存</span><button class="button compact" id="retryProviderPolicy" type="button" data-icon="refresh" hidden>重试</button></div></div>
+        <div class="panel-head"><div><h2>上游策略</h2></div><div class="pin-save-feedback"><span class="pin-save-status" id="providerPolicyState" role="status" aria-live="polite">自动保存</span><button class="button compact" id="retryProviderPolicy" type="button" data-icon="refresh" hidden>重试</button></div></div>
         <form class="pin-policy-layout" id="providerPolicyForm">
-          <div class="field"><label for="providerPolicy">上游 provider 策略</label><select class="control" id="providerPolicy" aria-describedby="providerPolicyHint"><option value="config" selected>插件配置优先（默认）</option><option value="client">客户端优先</option></select></div>
-          <p class="subtext" id="providerPolicyHint">使用模型预设或自定义 JSON，忽略客户端传入的上游参数。预设的 DeepSeek 1017 仅允许 deepseek 时自动附加区域约束。</p>
+          <div class="field"><label for="providerPolicy">上游 provider 策略</label><select class="control" id="providerPolicy" aria-describedby="providerPolicyHint"><option value="none" selected>不钉（默认）</option><option value="config">插件配置优先</option><option value="client">客户端优先</option></select></div>
+          <p class="subtext" id="providerPolicyHint">由 Cline 自动选路，不发送插件或客户端的路由参数；下方配置保留，但不参与请求。</p>
         </form>
       </div>
       <div class="panel">
@@ -656,10 +656,10 @@
         </dl></details>
         <div class="pin-probe-tools">
           <div class="field-line">
-            <div class="field"><label for="pinProbeCredential" title="按已保存的能力条件逐模型探测，结果取决于所用凭据与上游路由。">探测凭据</label><select class="control" id="pinProbeCredential" aria-describedby="pinProbeHint"><option value="">暂无可用额度的凭据</option></select></div>
+            <div class="field"><label for="pinProbeCredential" title="按当前策略逐模型探测，结果取决于所用凭据与上游路由。">探测凭据</label><select class="control" id="pinProbeCredential" aria-describedby="pinProbeHint"><option value="">暂无可用额度的凭据</option></select></div>
             <button class="button compact" id="probeAllModels" type="button" disabled data-icon="search" title="按顺序使用开始时选中的凭据探测所有模型；结果仅保留在当前页面。">探测全部模型</button>
           </div>
-          <p class="subtext" id="pinProbeHint">按有效能力条件探测候选，临时移除其他路由参数。</p>
+          <p class="subtext" id="pinProbeHint">查看本次提供方与候选；不钉时不应用能力过滤。</p>
           <p class="inline-state" id="pinProbeState" role="status" aria-live="polite"></p>
         </div>
         <form class="form-stack" id="pinModelsForm">
@@ -763,40 +763,27 @@
   </main>
 
   <!-- 发布时仅在需要重新弹出公告时递增 data-notice-revision，普通版本升级保持不变。 -->
-  <dialog id="releaseNoticeDialog" data-notice-revision="1" aria-labelledby="releaseNoticeTitle">
+  <dialog id="releaseNoticeDialog" data-notice-revision="2" aria-labelledby="releaseNoticeTitle">
     <div class="release-notice-head">
       <div><h2 id="releaseNoticeTitle">公告</h2><span class="badge" id="releaseNoticeVersion">ClinePassBridge</span></div>
       <form method="dialog"><button class="button icon ghost" type="submit" aria-label="关闭公告" title="关闭"><svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
     </div>
     <div class="release-notice-body" tabindex="0" role="region" aria-label="公告内容">
-      <section class="release-notice-item release-notice-featured" aria-labelledby="releaseNoticeSearchTitle">
-        <div class="release-notice-label"><span class="release-notice-number">01</span><span class="badge good">搜索工具已支持</span></div>
-        <h3 id="releaseNoticeSearchTitle">目前已支持搜索工具</h3>
-        <p>需要自行前往<strong>「模型映射」</strong>，点击对应模型的<strong>「联网」</strong>按钮，选择搜索工具并保存后使用。</p>
+      <section class="release-notice-item release-notice-featured" aria-labelledby="releaseNoticeRoutingTitle">
+        <div class="release-notice-label"><span class="badge warn">上游变更 · 2026-11-06</span></div>
+        <h3 id="releaseNoticeRoutingTitle">钉上游暂时失效，默认改为「不钉」</h3>
+        <p>Cline 已开始拒绝客户端路由参数。旧策略会触发 <strong>403</strong>，区域约束和能力过滤也无法继续固定官方提供方。</p>
+        <p>首次升级到本版会<strong>自动切换为「不钉」</strong>：直接由 Cline 选路，不再每次先失败再重试。原来的提供方、能力过滤和自定义参数仍然保留，但不发送给上游。</p>
+        <p class="release-notice-callout"><strong>请求恢复不等于恢复官方路由。</strong>自动选路可能落到 private，请以日志中的实际上游和响应模型为准。</p>
       </section>
-      <section class="release-notice-item" aria-labelledby="releaseNotice1017Title">
-        <div class="release-notice-label"><span class="release-notice-number">02</span><span class="badge good">新模型上线</span></div>
-        <h3 id="releaseNotice1017Title">DeepSeek V4.1 Flash 1017</h3>
-        <p>Cline 已在 ClinePass 中推出 <code>cline-pass/deepseek-v4.1-flash-1017</code> 模型。</p>
-        <p class="release-notice-callout">由于 1017 模型在 Cline 侧就与老模型使用不同的模型名，<strong>您需要自行添加模型映射，才能使用 1017 模型，请注意！</strong></p>
-      </section>
-      <section class="release-notice-item" aria-labelledby="releaseNoticeIdleTitle">
-        <div class="release-notice-label"><span class="release-notice-number">03</span><span class="badge warn">强烈建议</span></div>
-        <h3 id="releaseNoticeIdleTitle">关闭「流式卡住时提前截流」</h3>
-        <p>此功能有小概率导致提前截流，出现 <strong>502 错误</strong>，目前强烈建议关闭。</p>
-        <p>它原本是为前几天频繁出现的 Cline 流式卡住问题设计的。目前 Cline 那边已无此问题，就没有必要继续开启。</p>
-        <p>此功能上线时默认开启，<strong>老用户需要手动关闭并保存</strong>。目前版本已改为默认关闭，升级会保留已有设置。</p>
-      </section>
-      <section class="release-notice-item" aria-labelledby="releaseNoticeLimitTitle">
-        <div class="release-notice-label"><span class="release-notice-number">04</span><span class="badge">默认值调整 · 16 → 64 MiB</span></div>
-        <h3 id="releaseNoticeLimitTitle">调高最大响应大小，减少长输出截断</h3>
-        <p>此前插件内置的 <code>max_response_bytes</code> 默认值为 <strong>16 MiB</strong>。这一上限偏小，长思维链可能在输出后期超过限制，出现 <strong>413 错误并截断</strong>。</p>
-        <p>目前默认值已提高至 <strong>64 MiB</strong>。请老用户更新后前往「配置概览 → 请求与日志设置」，将「最大响应大小」调整为 <strong>64 MiB</strong> 并保存。</p>
+      <section class="release-notice-item" aria-labelledby="releaseNoticePolicyTitle">
+        <h3 id="releaseNoticePolicyTitle">可以手动切回，后续重启不会覆盖</h3>
+        <p>前往「钉上游 → 上游策略」可选择旧策略。每个带路由参数的请求仍可能先收到 403；上游明确拒绝时，插件会移除参数重试一次，并标记「已改为自动选路」。想避免这次失败，请保持「不钉」。</p>
       </section>
     </div>
     <div class="release-notice-foot">
       <p>关闭后不再自动提示</p>
-      <div class="release-notice-actions"><button class="button" id="releaseNoticeDismiss" type="button">知道了</button><button class="button primary" id="releaseNoticeSettings" type="button">前往配置概览</button></div>
+      <div class="release-notice-actions"><button class="button" id="releaseNoticeDismiss" type="button">知道了</button><button class="button primary" id="releaseNoticeSettings" type="button">查看上游策略</button></div>
     </div>
   </dialog>
 
@@ -975,7 +962,8 @@
   </dialog>
   <dialog class="dialog-wide" id="pinEvidenceDialog" aria-labelledby="pinEvidenceTitle">
     <h2 id="pinEvidenceTitle">钉上游：详细证据</h2>
-    <p><strong>2026-11-04 更新：</strong>下文为历史测试。新讨论报告旧能力过滤已不能排除 private；插件配置优先策略在 DeepSeek 1017 的允许列表仅为 deepseek 时自动附加区域约束。切换客户端优先、清空或更改允许列表可退出自动约束。US 用于排除 private，不表示推理位置；以正常生成和 finalProvider 验证，不能保证服务端未来仍遵循。参考：<a href="https://linux.do/t/topic/3119385" target="_blank" rel="noopener noreferrer">11 月 4 日讨论</a>。</p>
+    <p><strong>2026-11-06 更新：</strong>Cline 当前拒绝整个 providerOptions 字段，下文方法已失效。默认「不钉」不发送路由参数，不能保证官方提供方。</p>
+    <p><strong>2026-11-04 历史记录：</strong>下文为历史测试。新讨论报告旧能力过滤已不能排除 private；插件配置优先策略在 DeepSeek 1017 的允许列表仅为 deepseek 时自动附加区域约束。切换客户端优先、清空或更改允许列表可退出自动约束。US 用于排除 private，不表示推理位置；以正常生成和 finalProvider 验证，不能保证服务端未来仍遵循。参考：<a href="https://linux.do/t/topic/3119385" target="_blank" rel="noopener noreferrer">11 月 4 日讨论</a>。</p>
     <p>2026-10-23，同一测试账号、相同短文本的 7 次流式请求均正常结束。以下为网关报告的最终提供方。</p>
     <ul>
       <li><strong>DeepSeek 1017 默认 / 仅 only</strong>：均为 <code>openai-compatible-private</code>。</li>
@@ -1426,7 +1414,7 @@
         <div class="cell"><span class="cell-label">时间</span><div class="primary-text mono">${local ? '首 ' : ''}${formatTime(log.time)}</div>${local ? `<div class="subtext mono">末 ${formatTime(lastTime)}</div>` : ''}</div>
         <div class="cell log-model"><span class="cell-label">客户端模型 / 上游</span><div class="primary-text mono" title="${esc(log.model || '')}">${shown(log.model)}</div><div class="subtext mono" title="${esc(log.upstream_model || '')}">${shown(log.upstream_model)}</div><div class="subtext mono log-served-model" title="${esc(`真实响应模型：${responseModel || '未报告'}`)}">↳ ${shown(responseModel, '未报告')}</div></div>
         <div class="cell"><span class="cell-label">思考强度</span><span class="badge reasoning-badge" title="${log.reasoning_mapping ? (local ? '映射已计算；本次被本地退避拦截，未发往上游' : '插件收到的强度 → 发往上游的强度') : '未应用插件映射；— 表示未识别到显式强度'}">${esc(reasoningText(log))}</span></div>
-        <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : incomplete ? '响应截断' : idleCutoff ? '卡住截流' : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div>${networkLogBadge(log)}</div>
+        <div class="cell"><span class="cell-label">结果</span><span class="badge ${local ? 'warn' : status.cls}" title="${esc(limitLabel)}">${local ? `本地拦截 ×${number(count)}` : limited ? limitName : incomplete ? '响应截断' : idleCutoff ? '卡住截流' : log.error_kind === 'upstream_quota_exhausted' ? '额度耗尽' : status.label}</span><div class="subtext">${local ? '本地退避' : log.stream === true ? '流式' : log.stream === false ? '非流式' : '模式未知'}</div>${log.routing_fallback ? '<span class="badge warn" title="上游拒绝路由参数，已移除后重试">已改为自动选路</span>' : ''}${networkLogBadge(log)}</div>
         <div class="cell"><span class="cell-label">凭据</span><div class="primary-text truncate" title="${esc(credential)}">${esc(credential)}</div></div>
         <div class="cell"><span class="cell-label">实际上游</span><div class="primary-text truncate" title="${actual}">${actual}</div></div>
         <div class="cell"><span class="cell-label">首字 / 耗时</span><div class="log-latency">${latencyLine('首字', log.ttft_ms, 'ttft', local, log.completion_tokens)}${latencyLine('耗时', log.duration_ms, 'duration', local, log.completion_tokens)}</div></div>
@@ -1668,13 +1656,13 @@
       const error = String(test.error || '');
       const summary = error.split(/\r?\n/).find((line) => line.trim()) || '测试失败';
       const provider = test.upstream_skipped === true ? '未调用（本地退避）' : actualProvider(test.provider) || '未知';
-      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span class="model-test-provider truncate" title="实际上游：${esc(provider)}">实际上游 ${esc(provider)}</span><span>思考 ${esc(reasoningText(test))}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
+      return `<div class="model-test-result"><div class="model-test-meta"><span class="badge ${tone}">${label} · ${time}</span><span class="model-test-provider truncate" title="实际上游：${esc(provider)}">实际上游 ${esc(provider)}</span><span>思考 ${esc(reasoningText(test))}</span><span>凭据 ${esc(test.credential_label || test.credential_id || '—')}</span>${test.status ? `<span>状态 ${esc(test.status)}</span>` : ''}<span>${formatTime(test.tested_at)}</span></div>${test.routing_fallback ? '<span class="badge warn">路由参数被拒绝，已改为自动选路</span>' : ''}${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}</div>`;
     }
     function renderModelRows() {
       const credential = $('modelTestCredential').value;
       $('modelList').innerHTML = state.models.length ? state.models.map((model, index) => {
         const test = modelTestResults.get(modelTestKey(model));
-        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}${model.providers?.length ? ` · 固定: ${esc(model.providers.join(', '))}` : ''}</div></div><div class="row-actions"><button class="button compact model-tools" type="button" data-index="${index}" title="为这个模型注入上游内置搜索工具；客户端不必自己声明">${buttonIcon('search')}联网${modelToolsLabel(model.id)}</button><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending || reasoningMappingBusy ? 'disabled' : ''}>${buttonIcon('test')}${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">${buttonIcon('edit')}编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">${buttonIcon('trash')}删除</button></div>${modelTestHTML(test)}</div>`;
+        return `<div class="model-row"><div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}${model.providers?.length ? ` · ${(state.config?.provider_policy || 'none') === 'none' ? '已保存' : '提供方配置'}: ${esc(model.providers.join(', '))}` : ''}</div></div><div class="row-actions"><button class="button compact model-tools" type="button" data-index="${index}" title="为这个模型注入上游内置搜索工具；客户端不必自己声明">${buttonIcon('search')}联网${modelToolsLabel(model.id)}</button><button class="button compact test-model" type="button" data-index="${index}" ${!credential || test?.pending || reasoningMappingBusy ? 'disabled' : ''}>${buttonIcon('test')}${test?.pending ? '测试中…' : '测试模型'}</button><button class="button compact edit-model" type="button" data-index="${index}">${buttonIcon('edit')}编辑</button><button class="button compact danger delete-model" type="button" data-index="${index}">${buttonIcon('trash')}删除</button></div>${modelTestHTML(test)}</div>`;
       }).join('') : '<div class="empty">暂无模型映射</div>';
       syncPinModelTests();
     }
@@ -1695,7 +1683,7 @@
     // Capability slugs go through the same split, plus the server-side rules
     // (lowercase, no duplicates) so an edit round-trips unchanged.
     const parseHas = (value) => [...new Set(value.split(/[,\s]+/).filter(Boolean).map((capability) => capability.toLowerCase()))];
-    const providerProbeKey = (model, credential = $('pinProbeCredential').value) => JSON.stringify([model.id, model.upstream_id, credential, model.routing_mode === 'custom' ? model.provider_options?.gateway?.has ?? [] : parseHas(pinAutosave.hasDrafts.get(modelKey(model)) ?? (model.has || []).join(', ')), model.routing_mode || 'preset', model.provider_options ?? {}]);
+    const providerProbeKey = (model, credential = $('pinProbeCredential').value) => JSON.stringify([model.id, model.upstream_id, credential, state.config?.provider_policy || 'none', model.routing_mode === 'custom' ? model.provider_options?.gateway?.has ?? [] : parseHas(pinAutosave.hasDrafts.get(modelKey(model)) ?? (model.has || []).join(', ')), model.routing_mode || 'preset', model.provider_options ?? {}]);
     const deepseekPinPreset = (model) => model.upstream_id === 'cline-pass/deepseek-v4.1-flash-1017' ? { providers: ['deepseek'], has: ['vision', 'implicit-caching'] } : null;
     const isDeepseekUpstream = (model) => /(?:^|\/)deepseek(?:[-_/]|$)/i.test(String(model.upstream_id || ''));
     const orderedPinModels = (models) => models.map((model, index) => ({ model, index })).sort((a, b) => Number(isDeepseekUpstream(b.model)) - Number(isDeepseekUpstream(a.model)));
@@ -1808,9 +1796,12 @@
       $(id === 'pinModelsState' ? 'retryPinModels' : 'retryProviderPolicy').hidden = phase !== 'error';
     }
     function updateProviderPolicyHint() {
-      $('providerPolicyHint').textContent = $('providerPolicy').value === 'client'
-        ? '优先使用客户端传入的上游参数，未设置的字段由插件配置补齐。'
-        : '使用模型预设或自定义 JSON，忽略客户端传入的上游参数。预设的 DeepSeek 1017 仅允许 deepseek 时自动附加区域约束。';
+      const policy = $('providerPolicy').value;
+      $('providerPolicyHint').textContent = policy === 'none'
+        ? '由 Cline 自动选路，不发送插件或客户端的路由参数；下方配置保留，但不参与请求。'
+        : policy === 'client'
+          ? '优先使用客户端传入的上游参数，未设置的字段由插件配置补齐。当前上游拒绝这些参数时，会移除后重试一次。'
+          : '使用模型预设或自定义 JSON。当前上游拒绝这些参数时，会移除后重试一次，不能保证固定提供方。';
     }
     async function flushProviderPolicy() {
       if (policyAutosave.flight) return policyAutosave.flight;
@@ -1825,6 +1816,7 @@
           }
           pinSaveState('providerPolicyState', '已保存', 'saved');
           renderModelRows();
+          renderPinModelRows();
           return true;
         } catch (error) {
           pinSaveState('providerPolicyState', `保存失败：${error.message}`, 'error');
@@ -1852,13 +1844,13 @@
         if (draft === undefined && input !== document.activeElement) input.value = values.join(', ');
         if (capability) {
           const badge = input.closest('.model-row').querySelector('.pin-has-badge');
-          badge.textContent = values.length ? `能力：${values.join(', ')}` : '未设置能力过滤';
-          badge.classList.toggle('good', values.length > 0);
+          badge.textContent = values.length ? `${(state.config?.provider_policy || 'none') === 'none' ? '已保存，未启用' : '能力'}：${values.join(', ')}` : '未设置能力过滤';
+          badge.classList.toggle('good', (state.config?.provider_policy || 'none') !== 'none' && values.length > 0);
           continue;
         }
         const badge = input.closest('.model-row').querySelector('.pin-routing-badge');
-        badge.textContent = values.length > 1 ? '白名单' : values.length ? '已固定' : '自动路由';
-        badge.classList.toggle('good', values.length > 0);
+        badge.textContent = (state.config?.provider_policy || 'none') === 'none' ? '不钉 · 配置保留' : values.length > 1 ? '白名单配置' : values.length ? '提供方配置' : '自动路由';
+        badge.classList.toggle('good', (state.config?.provider_policy || 'none') !== 'none' && values.length > 0);
       }
       syncProviderProbeResults();
     }
@@ -1935,13 +1927,13 @@
     function providerProbeHTML(model) {
       const key = providerProbeKey(model);
       const probe = state.providerProbes.get(key);
-      if (state.providerProbePending.get(model.id)?.key === key) return '<div class="subtext">正在探测可钉上游…</div>';
-      if (!probe) return '<div class="subtext">尚无当前凭据与能力条件的候选，点击「探测可钉上游」获取</div>';
+      if (state.providerProbePending.get(model.id)?.key === key) return '<div class="subtext">正在探测上游…</div>';
+      if (!probe) return '<div class="subtext">尚无当前凭据与策略的探测结果，点击「探测上游」获取</div>';
       const providers = Array.isArray(probe.providers) ? probe.providers : [];
-      const chips = providers.map((provider) => model.routing_mode === 'custom' ? `<span class="badge">${esc(provider)}</span>` : `<button class="button compact provider-chip" type="button" data-provider="${esc(provider)}" ${state.modelBusy && !pinAutosave.flight ? 'disabled' : ''}>${buttonIcon('plus')}${esc(provider)}</button>`).join('');
+      const chips = providers.map((provider) => model.routing_mode === 'custom' || (state.config?.provider_policy || 'none') === 'none' || probe.has_applied === false ? `<span class="badge">${esc(provider)}</span>` : `<button class="button compact provider-chip" type="button" data-provider="${esc(provider)}" ${state.modelBusy && !pinAutosave.flight ? 'disabled' : ''}>${buttonIcon('plus')}${esc(provider)}</button>`).join('');
       const error = String(probe.error || '');
       const summary = error.split(/\r?\n/).find((line) => line.trim()) || '探测失败';
-      return `${chips ? `<div class="provider-chips">${chips}</div>` : ''}<div class="subtext">${esc(probe.note)}${probe.served_by ? ` · 本次由 ${esc(probe.served_by)} 服务` : ''}${probe.credential_label || probe.credential_id ? ` · 凭据 ${esc(probe.credential_label || probe.credential_id)}` : ''}</div>${probe.ok === false ? '<span class="badge bad">探测失败</span>' : ''}${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}`;
+      return `${chips ? `<div class="provider-chips">${chips}</div>` : ''}<div class="subtext">${esc(probe.note)}${probe.served_by ? ` · 本次由 ${esc(probe.served_by)} 服务` : ''}${probe.credential_label || probe.credential_id ? ` · 凭据 ${esc(probe.credential_label || probe.credential_id)}` : ''}</div>${probe.routing_fallback ? '<span class="badge warn">路由参数被拒绝，已改为自动选路</span>' : ''}${probe.has_applied === false ? '<span class="badge">未应用能力过滤</span>' : ''}${probe.ok === false ? '<span class="badge bad">探测失败</span>' : ''}${error ? `<details class="model-test-error"><summary><span>${esc(summary)}</span><span>完整错误</span></summary><pre>${esc(error)}</pre></details>` : ''}`;
     }
     function syncProviderProbeControls() {
       const credential = $('pinProbeCredential').value;
@@ -1949,7 +1941,7 @@
       for (const button of $('pinModelList').querySelectorAll('.probe-providers')) {
         const pending = state.providerProbePending.has(button.dataset.model);
         button.disabled = pending || state.providerProbeBatch || !credential;
-        setButtonLabel(button, pending ? '探测中…' : '探测可钉上游', 'search');
+        setButtonLabel(button, pending ? '探测中…' : '探测上游', 'search');
         button.setAttribute('aria-busy', String(pending));
       }
     }
@@ -1969,6 +1961,7 @@
     function renderPinModelRows() {
       $('pinModelList').innerHTML = state.models.length ? orderedPinModels(state.models).map(({ model, index }) => {
         const custom = model.routing_mode === 'custom';
+        const unpinned = (state.config?.provider_policy || 'none') === 'none';
         const value = pinAutosave.drafts.get(modelKey(model)) ?? model.providers.join(', ');
         const providers = parseProviders(value);
         const hasValue = pinAutosave.hasDrafts.get(modelKey(model)) ?? (model.has || []).join(', ');
@@ -1976,15 +1969,15 @@
         const preset = deepseekPinPreset(model) ? `<button class="button compact pin-deepseek-preset" type="button" data-index="${index}" title="将允许列表设为 deepseek，能力过滤设为 vision, implicit-caching，并自动保存">${buttonIcon('pin')}应用 DeepSeek 预设</button>` : '';
         return `<div class="model-row" data-model-key="${esc(modelKey(model))}">
           <div class="model-main"><div class="primary-text mono">${shown(model.id)}</div><div class="subtext mono">→ ${shown(model.upstream_id)}</div></div>
-          <span class="badge pin-routing-badge ${!custom && providers.length ? 'good' : ''}">${custom ? '自定义 JSON' : providers.length > 1 ? '白名单' : providers.length ? '已固定' : '自动路由'}</span>
+          <span class="badge pin-routing-badge ${!unpinned && !custom && providers.length ? 'good' : ''}">${unpinned ? '不钉 · 配置保留' : custom ? '自定义 JSON' : providers.length > 1 ? '白名单配置' : providers.length ? '提供方配置' : '自动路由'}</span>
           <div class="row-actions">
             <button class="button compact pin-routing-options" type="button" data-index="${index}" aria-haspopup="dialog">${buttonIcon('gear')}编辑参数</button>
-            <button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 可钉上游`)}" aria-controls="pinProbeResult-${index}">${buttonIcon('search')}探测可钉上游</button>
+            <button class="button compact probe-providers" type="button" data-model="${esc(model.id)}" aria-label="${esc(`探测 ${model.id} 上游`)}" aria-controls="pinProbeResult-${index}">${buttonIcon('search')}探测上游</button>
             <button class="button compact pin-test-model" type="button" data-index="${index}" aria-label="${esc(`测试 ${model.id}`)}" aria-controls="pinModelTest-${index}" title="使用当前所选凭据测试模型，测试前会先完成自动保存">${buttonIcon('test')}测试模型</button>
           </div>
           ${custom ? `<div class="pin-custom-summary">providerOptions · ${esc(Object.keys(model.provider_options || {}).join(' · ') || '空对象')}</div>` : ''}
           <div class="field pin-editor" ${custom ? 'hidden' : ''}><label for="pinProviders-${index}">允许的上游</label><input class="control mono" id="pinProviders-${index}" data-index="${index}" data-model-key="${esc(modelKey(model))}" value="${esc(value)}" ${custom ? 'disabled' : ''} autocomplete="off" spellcheck="false" aria-describedby="pinInputHint pinSemantics"></div>
-          <div class="field pin-editor" ${custom ? 'hidden' : ''}><div class="pin-editor-heading"><label for="pinHas-${index}">能力过滤（可选）</label>${preset}</div><input class="control mono" id="pinHas-${index}" data-index="${index}" data-has-key="${esc(modelKey(model))}" value="${esc(hasValue)}" ${custom ? 'disabled' : ''} placeholder="如 vision, implicit-caching" autocomplete="off" spellcheck="false" aria-describedby="pinHasHint pinSemantics"><div class="subtext pin-has-badge ${capabilities.length ? 'good' : ''}" id="pinHasBadge-${index}">${capabilities.length ? `能力：${esc(capabilities.join(', '))}` : '未设置能力过滤'}</div></div>
+          <div class="field pin-editor" ${custom ? 'hidden' : ''}><div class="pin-editor-heading"><label for="pinHas-${index}">能力过滤（可选）</label>${preset}</div><input class="control mono" id="pinHas-${index}" data-index="${index}" data-has-key="${esc(modelKey(model))}" value="${esc(hasValue)}" ${custom ? 'disabled' : ''} placeholder="如 vision, implicit-caching" autocomplete="off" spellcheck="false" aria-describedby="pinHasHint pinSemantics"><div class="subtext pin-has-badge ${!unpinned && capabilities.length ? 'good' : ''}" id="pinHasBadge-${index}">${capabilities.length ? `${unpinned ? '已保存，未启用' : '能力'}：${esc(capabilities.join(', '))}` : '未设置能力过滤'}</div></div>
           <div class="pin-editor" id="pinProbeResult-${index}" role="status" aria-live="polite">${providerProbeHTML(model)}</div>
           <div class="pin-model-test" id="pinModelTest-${index}" role="status" aria-live="polite"></div>
         </div>`;
@@ -2007,7 +2000,7 @@
           if (typeof result?.ok !== 'boolean') throw new Error('探测接口返回了无效结果');
           if (result.upstream_id && result.upstream_id !== model.upstream_id) throw new Error('模型映射在探测时发生变化，请重新探测');
           const effectiveHas = model.routing_mode === 'custom' ? model.provider_options?.gateway?.has : model.has;
-          if (Object.hasOwn(result, 'has') && JSON.stringify(result.has ?? []) !== JSON.stringify(effectiveHas ?? [])) throw new Error('能力条件在探测时发生变化，请重新探测');
+          if (result.has_applied !== false && Object.hasOwn(result, 'has') && JSON.stringify(result.has ?? []) !== JSON.stringify(effectiveHas ?? [])) throw new Error('能力条件在探测时发生变化，请重新探测');
           state.providerProbes.set(key, { ...result, credential_id: result.credential_id || credentialID, credential_label: result.credential_label || credentialLabel });
         } catch (error) {
           state.providerProbes.set(key, { ok: false, providers: [], note: '探测请求失败', error: error.message, credential_id: credentialID, credential_label: credentialLabel });
@@ -2463,7 +2456,7 @@
         $('clientRetryCompatibility').checked = config?.client_retry_compatibility !== false;
         $('streamIdleCutoffEnabled').checked = config?.stream_idle_cutoff_enabled === true;
         $('streamIdleTimeoutSeconds').value = present(config?.stream_idle_timeout_seconds) ? config.stream_idle_timeout_seconds : 20;
-        $('providerPolicy').value = policyAutosave.desired ?? (config?.provider_policy === 'client' ? 'client' : 'config');
+        $('providerPolicy').value = policyAutosave.desired ?? (['none', 'client', 'config'].includes(config?.provider_policy) ? config.provider_policy : 'none');
         dropdowns.get('providerPolicy').sync();
         updateProviderPolicyHint();
         $('timeoutSeconds').value = present(config?.timeout_seconds) ? config.timeout_seconds : 600;
