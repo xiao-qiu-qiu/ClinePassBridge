@@ -524,3 +524,52 @@ func TestSuccessfulProviderIsNotOverwritten(t *testing.T) {
 		t.Errorf("provider = %q/%q, want the earlier value preserved", entry.Provider, attempt.Provider)
 	}
 }
+
+func TestRouting403RetriesWithoutGatewayRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name, message string
+		retry         bool
+	}{
+		{"routing rejected", `Error 403: client-supplied "providerOptions" model routing is not supported`, true},
+		{"ordinary forbidden", "Permission denied", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := registerService(t, modelConfig(t, "    providers: [deepseek]\n"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rejection := jsonPlan(map[string]any{"error": map[string]any{"code": "API_REQUEST_ERROR_CODE", "message": tc.message}})
+			rejection.status = http.StatusForbidden
+			h := newFakeHost(rejection, ssePlan(simpleSSE()))
+			var bodies []map[string]any
+			s.SetHost(func(method string, payload, out any) error {
+				if method == "host.http.do_stream" {
+					body, err := decodeObject(payload.(map[string]any)["body"].([]byte))
+					if err != nil {
+						return err
+					}
+					bodies = append(bodies, body)
+				}
+				return h.call(method, payload, out)
+			})
+			_, err = s.Handle("executor.execute", requestWithPayload(`{"messages":[{"role":"user","content":"hello"}],"providerOptions":{"anthropic":{"thinking":{"type":"enabled"}}}}`))
+			if !tc.retry {
+				if statusOf(err) != http.StatusForbidden || len(bodies) != 1 {
+					t.Fatalf("expected original 403 and one request, got %v and %d requests", err, len(bodies))
+				}
+				return
+			}
+			if err != nil || len(bodies) != 2 {
+				t.Fatalf("expected successful retry, got %v and %d requests", err, len(bodies))
+			}
+			first := object(bodies[0]["providerOptions"])
+			second := object(bodies[1]["providerOptions"])
+			if first["gateway"] == nil || second["gateway"] != nil || bodies[1]["provider"] != nil {
+				t.Fatalf("unexpected routing options: first=%v second=%v", first, second)
+			}
+			if string(jsonBytes(first["anthropic"])) != string(jsonBytes(second["anthropic"])) {
+				t.Fatal("retry changed a non-routing provider namespace")
+			}
+		})
+	}
+}
