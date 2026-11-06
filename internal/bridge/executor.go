@@ -10,6 +10,7 @@ import (
 )
 
 type upstreamStream struct {
+	rejectedBody *bytes.Buffer
 	local        *egressLocalStream
 	output       *outputStreamLifecycle
 	deadline     time.Time
@@ -135,7 +136,7 @@ func (s *Service) applyProviderRouting(j map[string]any, alias string) {
 func headers(c Credential) http.Header {
 	return http.Header{"Authorization": []string{"Bearer " + c.APIKey}, "Content-Type": []string{"application/json"}, "User-Agent": []string{"ClinePassBridge/" + Version}}
 }
-func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
+func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, stream bool, attempts *int, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
 	j["stream"] = stream
 	if stream {
 		opts := object(j["stream_options"])
@@ -147,9 +148,39 @@ func (s *Service) request(r ExecutorRequest, c Credential, j map[string]any, str
 	} else {
 		delete(j, "stream_options")
 	}
-	payload := map[string]any{"host_callback_id": r.HostCallbackID, "method": "POST", "url": s.config().BaseURL + "/chat/completions", "headers": headers(c), "body": jsonBytes(j)}
 	management, _ := r.Metadata["egress_management"].(bool)
-	return s.openUpstream(s.egressCredentialPayload(payload, c, management), r.deadline, diagnostics...)
+	open := func() (upstreamStream, error) {
+		*attempts++
+		payload := map[string]any{"host_callback_id": r.HostCallbackID, "method": "POST", "url": s.config().BaseURL + "/chat/completions", "headers": headers(c), "body": jsonBytes(j)}
+		return s.openUpstream(s.egressCredentialPayload(payload, c, management), r.deadline, diagnostics...)
+	}
+	up, err := open()
+	opts := object(j["providerOptions"])
+	if err != nil || up.StatusCode != http.StatusForbidden || opts["gateway"] == nil {
+		return up, err
+	}
+
+	// Inspect the rejection before downstream output. Keep the original body
+	// for ordinary 403 handling if this is not Cline's routing validation error.
+	var rejection bytes.Buffer
+	readErr := s.read(up, func(chunk []byte) error {
+		_, err := rejection.Write(chunk)
+		return err
+	})
+	up.rejectedBody = &rejection
+	body, decodeErr := decodeObject(rejection.Bytes())
+	const routingRejected = `Error 403: client-supplied "providerOptions" model routing is not supported`
+	if readErr != nil || decodeErr != nil || errorMessage(body) != routingRejected || !time.Now().Before(up.deadline) {
+		return up, nil
+	}
+
+	delete(j, "provider")
+	delete(opts, "gateway")
+	if len(opts) == 0 {
+		delete(j, "providerOptions")
+	}
+	r.deadline = up.deadline
+	return open()
 }
 
 func (s *Service) openUpstream(payload any, deadline time.Time, diagnostics ...*modelTestDiagnostics) (upstreamStream, error) {
@@ -306,7 +337,12 @@ func (s *Service) readJSON(up upstreamStream) ([]byte, error) {
 
 func (s *Service) readJSONObserved(up upstreamStream, observe func(map[string]any)) ([]byte, error) {
 	var b bytes.Buffer
-	e := s.read(up, func(v []byte) error { b.Write(v); return nil })
+	var e error
+	if up.rejectedBody != nil {
+		b = *up.rejectedBody
+	} else {
+		e = s.read(up, func(v []byte) error { b.Write(v); return nil })
+	}
 	var j map[string]any
 	if observe != nil || up.StatusCode < 200 || up.StatusCode >= 300 {
 		j, _ = decodeObject(b.Bytes())
@@ -364,9 +400,8 @@ func (s *Service) execute(r ExecutorRequest) (any, error) {
 		}
 		t := time.Now()
 		var us upstreamStream
-		*entry.UpstreamAttempts++
 		recordServerTools(j, &entry, &attempt)
-		us, e = s.request(r, c, j, wantStream)
+		us, e = s.request(r, c, j, wantStream, entry.UpstreamAttempts)
 		if e == nil {
 			if wantStream {
 				var cp *completion
@@ -568,9 +603,8 @@ func (s *Service) executeStream(r ExecutorRequest) (any, error) {
 	if e != nil {
 		return failEarly(e)
 	}
-	*entry.UpstreamAttempts++
 	recordServerTools(j, &entry, &attempt)
-	us, e := s.request(r, c, j, true)
+	us, e := s.request(r, c, j, true, entry.UpstreamAttempts)
 	upstreamOpened = us.StreamID != ""
 	if e != nil {
 		return failEarly(e)
