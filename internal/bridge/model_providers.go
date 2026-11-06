@@ -77,8 +77,7 @@ func (s *Service) discoverProviders(r ManagementRequest) (any, error) {
 	}
 	if err == nil {
 		var stream upstreamStream
-		*entry.UpstreamAttempts++
-		stream, err = s.request(req, credential, j, true, diagnostics)
+		stream, err = s.request(req, credential, j, true, entry.UpstreamAttempts, diagnostics)
 		if err == nil {
 			_, err = s.consumeSSE(stream, in.Model, &entry, &attempt, start, nil)
 		}
